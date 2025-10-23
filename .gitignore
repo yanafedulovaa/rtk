@@ -1,0 +1,28 @@
+# Виртуальные окружения
+.venv/
+venv/
+
+# Кэш Python
+__pycache__/
+*.py[cod]
+*.log
+
+# Django файлы
+db.sqlite3
+/media/
+staticfiles/
+*.pyc
+
+# IDE
+.idea/
+.vscode/
+
+# Node / React
+node_modules/
+build/
+dist/
+
+# Docker
+*.pid
+*.log
+.env

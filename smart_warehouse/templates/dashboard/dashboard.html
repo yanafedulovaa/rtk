@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Мониторинг{% endblock %}
+{% block content %}
+<h2>Мониторинг в реальном времени</h2>
+
+<div id="stats"></div>
+<div id="robots"></div>
+<div id="scans"></div>
+
+<script>
+async function loadDashboard() {
+  const res = await fetch("/api/dashboard/current");
+  const data = await res.json();
+
+  const statsDiv = document.getElementById("stats");
+  statsDiv.innerHTML = `
+    <h3>Статистика</h3>
+    <p>Активных роботов: ${data.statistics.active_robots}</p>
+    <p>Критические остатки: ${data.statistics.critical_stock}</p>
+    <p>Средний заряд батарей: ${data.statistics.avg_battery}%</p>
+  `;
+
+  const robotsDiv = document.getElementById("robots");
+  robotsDiv.innerHTML = "<h3>Роботы</h3>" + data.robots.map(r => `
+    <div>
+      🤖 <b>${r.id}</b> — зона ${r.zone}, заряд ${r.battery}%
+    </div>
+  `).join("");
+
+  const scansDiv = document.getElementById("scans");
+  scansDiv.innerHTML = "<h3>Последние сканирования</h3>" +
+    data.recent_scans.map(s => `
+      <div>
+        ${s.time} | ${s.robot_id} | ${s.product} (${s.quantity}) — ${s.status}
+      </div>
+    `).join("");
+}
+
+setInterval(loadDashboard, 5000);
+loadDashboard();
+</script>
+{% endblock %}

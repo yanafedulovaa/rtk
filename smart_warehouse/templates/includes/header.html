@@ -1,0 +1,19 @@
+<header>
+  <nav class="navbar shadow-sm">
+    <div class="container">
+      {% with request.resolver_match.view_name as view_name %}
+        <ul class="nav nav-pills">
+            <li class="nav-item">
+            Сотрудник: Дарья О.
+            </li>
+            <li class="nav-item">
+                История
+            </li>
+            <li class="nav-item">
+                Роботы
+            </li>
+        </ul>
+      {% endwith %}
+    </div>
+  </nav>
+</header>

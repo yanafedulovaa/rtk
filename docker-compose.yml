@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./smart_warehouse
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./smart_warehouse:/app
+    environment:
+      DJANGO_SETTINGS_MODULE: smart_warehouse.settings
+    command: python manage.py runserver 0.0.0.0:3000
+
+  robot_emulator:
+    build: ./robot_emulator
+    environment:
+      API_URL: http://backend:3000
+      ROBOTS_COUNT: 3
+      UPDATE_INTERVAL: 5
+    depends_on:
+      - backend
