@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useContext } from "react";
 import api from "../api";
 import { AuthContext } from "../context/AuthContext";
+import WarehouseMap from "./WarehouseMap";
+import InventoryPredict from "./InventoryPredict";
 
 export default function Dashboard() {
   const { access } = useContext(AuthContext);
@@ -57,6 +59,11 @@ export default function Dashboard() {
           <h3>Активные роботы</h3>
           <p style={{ fontSize: 24 }}>{data.statistics.active_robots}</p>
         </div>
+            {/* Карта склада */}
+        <div style={{ marginBottom: 20 }}>
+          <WarehouseMap />
+        </div>
+
         <div style={{ padding: 10, border: "1px solid #ccc", borderRadius: 8, width: 180 }}>
           <h3>Сканировано сегодня</h3>
           <p style={{ fontSize: 24 }}>{data.statistics.checked_today}</p>
@@ -99,7 +106,11 @@ export default function Dashboard() {
           </tbody>
         </table>
       </div>
-
+            {/* ------------------- ИИ аналитика ------------------- */}
+        <div style={{ padding: 20 }}>
+          {/* Прогноз остатков */}
+          <InventoryPredict />
+        </div>
       {/* ------------------- Последние сканы ------------------- */}
       <div>
         <h2>Последние сканы</h2>
@@ -130,4 +141,5 @@ export default function Dashboard() {
       </div>
     </div>
   );
+
 }

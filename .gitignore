@@ -25,4 +25,4 @@ dist/
 # Docker
 *.pid
 *.log
-.env
+smart_warehouse/.env

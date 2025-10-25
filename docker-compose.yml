@@ -4,17 +4,29 @@ services:
   backend:
     build: ./smart_warehouse
     ports:
-      - "3000:3000"
+      - "8000:8000"  # Django стандартный порт
     volumes:
-      - ./smart_warehouse:/app
+      - ./backend:/app
     environment:
       DJANGO_SETTINGS_MODULE: smart_warehouse.settings
-    command: python manage.py runserver 0.0.0.0:3000
+    command: python manage.py runserver 0.0.0.0:8000
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      CHOKIDAR_USEPOLLING: "true"  # для hot reload на Windows/macOS
+    depends_on:
+      - backend
 
   robot_emulator:
     build: ./robot_emulator
     environment:
-      API_URL: http://backend:3000
+      API_URL: http://backend:8000  # важно использовать порт Django
       ROBOTS_COUNT: 3
       UPDATE_INTERVAL: 5
     depends_on:
