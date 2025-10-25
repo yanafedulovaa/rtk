@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useContext } from "react";
 import api from "../api";
 import { AuthContext } from "../context/AuthContext";
+import WarehouseMap from "./WarehouseMap";
+import InventoryPredict from "./InventoryPredict"
+
 
 export default function Dashboard() {
   const { access } = useContext(AuthContext);
@@ -128,6 +131,10 @@ export default function Dashboard() {
           </tbody>
         </table>
       </div>
+      <div style={{ marginBottom: 20 }}>
+      <WarehouseMap />
     </div>
+    </div>
+
   );
 }
