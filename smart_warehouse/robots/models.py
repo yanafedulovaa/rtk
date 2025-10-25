@@ -9,5 +9,6 @@ class Robot(models.Model):
     current_zone = models.CharField(max_length=10)
     current_row = models.IntegerField()
     current_shelf = models.IntegerField()
+    is_active = models.BooleanField(default=True)
 
 
