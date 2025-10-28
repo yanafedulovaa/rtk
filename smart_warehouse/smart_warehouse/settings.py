@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-b_5(1viwe*kp0_^fie!ab%wvl#xhp&+keefpw%1tg-_rw9$8vq
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'backend']
 
 
 # Application definition
@@ -44,7 +44,9 @@ INSTALLED_APPS = [
     'robots',
     'products',
     'warehouse',
-    "corsheaders"
+    "corsheaders",
+    'inventory',
+    'django_rest_passwordreset'
 ]
 
 MIDDLEWARE = [
@@ -83,8 +85,12 @@ WSGI_APPLICATION = 'smart_warehouse.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'smartwarehouse',       # имя базы
+        'USER': 'postgres',            # пользователь
+        'PASSWORD': 'marki51151',    # пароль
+        'HOST': 'localhost',                  # имя сервиса из docker-compose
+        'PORT': '5432',
     }
 }
 
@@ -196,3 +202,11 @@ AUTHENTICATION_BACKENDS = [
 
 load_dotenv()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+
+# Локальная разработка — письма выводятся в консоль
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# Остальные параметры не нужны
+DEFAULT_FROM_EMAIL = 'test@local.dev'
+

@@ -39,7 +39,8 @@ class DashboardCurrentView(APIView):
                     'robot_id': s.robot_id,
                     'product': s.product.name,
                     'quantity': s.quantity,
-                    'status': s.status
+                    'status': s.status,
+                    'session_status': s.session_status
                 } for s in recent_scans
             ],
             'statistics': stats
