@@ -1,3 +1,5 @@
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from datetime import datetime, timezone as dt_timezone
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
@@ -9,6 +11,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import Robot
 from warehouse.models import InventoryHistory
 from products.models import Product
+
 
 
 class RobotTokenView(APIView):
@@ -33,6 +36,31 @@ class RobotTokenView(APIView):
 
 
 class RobotScanView(APIView):
+    def send_robot_update(robot, scans):
+        """
+        Отправка обновлений робота на WebSocket для dashboard
+        """
+        channel_layer = get_channel_layer()
+
+        data = {
+            "type": "robot_update",
+            "robot_id": robot.id,
+            "zone": robot.current_zone,
+            "row": robot.current_row,
+            "shelf": robot.current_shelf,
+            "battery_level": robot.battery_level,
+            "status": "active" if robot.battery_level > 10 else "low_battery",
+            "last_update": robot.last_update.isoformat(),
+            "scans": scans  # Можно отправлять последние сканы для таблицы
+        }
+
+        async_to_sync(channel_layer.group_send)(
+            "dashboard",  # группа, к которой присоединён consumer
+            {
+                "type": "send_update",  # имя метода в consumer
+                "data": data
+            }
+        )
     permission_classes = []
     authentication_classes = []
 
@@ -65,6 +93,7 @@ class RobotScanView(APIView):
             }
         )
 
+        scans_for_ws = []
         for scan in scans:
             product_id = scan.get("product_id")
             quantity = scan.get("quantity")
@@ -72,7 +101,7 @@ class RobotScanView(APIView):
             product_name = scan.get("product_name", "")
 
             if not product_id or quantity is None:
-                continue  # Пропускаем некорректные записи
+                continue
 
             product, _ = Product.objects.get_or_create(
                 id=product_id,
@@ -89,5 +118,33 @@ class RobotScanView(APIView):
                 status=status_text,
                 scanned_at=last_update
             )
+
+            scans_for_ws.append({
+                "product_id": product_id,
+                "product_name": product_name,
+                "quantity": quantity,
+                "status": status_text
+            })
+
+        # --- WebSocket: отправляем обновление на dashboard ---
+        channel_layer = get_channel_layer()
+        ws_data = {
+            "type": "robot_update",
+            "robot_id": robot.id,
+            "zone": robot.current_zone,
+            "row": robot.current_row,
+            "shelf": robot.current_shelf,
+            "battery_level": robot.battery_level,
+            "status": "active" if robot.battery_level > 10 else "low_battery",
+            "last_update": robot.last_update.isoformat(),
+            "scans": scans_for_ws
+        }
+        async_to_sync(channel_layer.group_send)(
+            "dashboard",  # группа, к которой подключены клиенты dashboard
+            {
+                "type": "send_update",
+                "data": ws_data
+            }
+        )
 
         return Response({"status": "received"}, status=status.HTTP_200_OK)

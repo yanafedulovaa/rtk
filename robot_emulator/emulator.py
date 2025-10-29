@@ -1,5 +1,3 @@
-# robot_emulator/emulator.py
-
 import json
 
 import time
@@ -23,11 +21,10 @@ class RobotEmulator:
 
         self.battery = 100
 
-        self.current_zone = 'A'
+        self.current_zone = chr(ord('A') + random.randint(0, 4))  # A-E
+        self.current_row = random.randint(1, 20)
+        self.current_shelf = random.randint(1, 10)
 
-        self.current_row = 1
-
-        self.current_shelf = 1
         # Список тестовых товаров
 
         self.products = [
@@ -132,7 +129,7 @@ class RobotEmulator:
 
             response = requests.post(
 
-                f"{self.api_url}/api/robots/data",
+                f"{self.api_url}/api/robots/data/",
 
                 json=data,
 
@@ -171,14 +168,14 @@ class RobotEmulator:
 
 
 if __name__ == "__main__":
+    api_url = "http://127.0.0.1:8000"
+    # api_url = os.getenv('API_URL', 'http://localhost:3000')
 
-    api_url = os.getenv('API_URL', 'http://localhost:3000')
-
-    robots_count = int(os.getenv('ROBOTS_COUNT', 5))
+    robots_count = int(os.getenv('ROBOTS_COUNT', 10))
 
     # Запуск эмуляторов роботов
 
-    import threading
+    import threading #!
 
     for i in range(1, robots_count + 1):
         robot = RobotEmulator(f"RB-{i:03d}", api_url)

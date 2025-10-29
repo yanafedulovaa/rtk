@@ -1,16 +1,6 @@
-import React, { useState, useEffect, useContext } from "react";
-import api from "../api"; // axios-инстанс
-import { AuthContext } from "../context/AuthContext";
+import React, { useState } from "react";
 
-export default function WarehouseMap() {
-  const { access } = useContext(AuthContext);
-
-  const [robots, setRobots] = useState([]);
-  const [zoneStatus, setZoneStatus] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [scale, setScale] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+export default function WarehouseMap({ robots = [], recentScans = [] }) {
   const [hoveredRobot, setHoveredRobot] = useState(null);
   const [hoveredCell, setHoveredCell] = useState(null);
 
@@ -19,7 +9,21 @@ export default function WarehouseMap() {
   const zones = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
   const rows = 50;
 
-  // Цвет ячейки в зависимости от состояния
+  // Создаём объект зон по последним сканам
+  const zoneStatus = {};
+  zones.forEach((zone) => {
+    for (let r = 1; r <= rows; r++) {
+      zoneStatus[`${zone}${r}`] = null;
+    }
+  });
+  recentScans.forEach((scan) => {
+    const key = `${scan.zone}${scan.row_number}`;
+    const prev = zoneStatus[key];
+    if (!prev || new Date(scan.scanned_at) > new Date(prev?.scanned_at)) {
+      zoneStatus[key] = scan;
+    }
+  });
+
   const getZoneColor = (cell) => {
     if (!cell) return "#fff3cd"; // нет данных — жёлтый
     const now = new Date();
@@ -35,83 +39,11 @@ export default function WarehouseMap() {
     return "green";
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await api.get("/dashboard/current/", {
-          headers: { Authorization: `Bearer ${access}` },
-        });
-
-        // Нормализуем роботов
-        const robotsData = (res.data.robots || []).map((r) => ({
-          ...r,
-          battery: r.battery,
-          status: r.status || "active",
-        }));
-        setRobots(robotsData);
-
-        // Формируем объект зон
-        const scans = res.data.recent_scans || [];
-        const newZoneData = {};
-
-        scans.forEach((scan) => {
-          const key = `${scan.zone}${scan.row_number}`;
-          const prev = newZoneData[key];
-          // если несколько сканов — берём самый свежий
-          if (!prev || new Date(scan.scanned_at) > new Date(prev.scanned_at)) {
-            newZoneData[key] = scan;
-          }
-        });
-
-        // создаём пустые ячейки для отсутствующих
-        zones.forEach((zone) => {
-          for (let r = 1; r <= rows; r++) {
-            const key = `${zone}${r}`;
-            if (!newZoneData[key]) {
-              newZoneData[key] = null;
-            }
-          }
-        });
-
-        setZoneStatus(newZoneData);
-        setError(null);
-      } catch (err) {
-        console.error(err);
-        setError("Не удалось загрузить данные карты склада");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
-  }, [access]);
-
-  const handleZoomIn = () => setScale((s) => Math.min(s + 0.2, 3));
-  const handleZoomOut = () => setScale((s) => Math.max(s - 0.2, 0.5));
-  const handleCenter = () => setOffset({ x: 0, y: 0 });
-
-  if (loading) return <p>Загрузка карты...</p>;
-  if (error) return <p style={{ color: "red" }}>{error}</p>;
-
   return (
     <div style={{ padding: "16px", position: "relative" }}>
       <h2 style={{ fontSize: "20px", marginBottom: "12px" }}>
         Интерактивная карта склада
       </h2>
-
-      <div style={{ marginBottom: "12px" }}>
-        <button onClick={handleZoomIn} style={buttonStyle}>
-          +
-        </button>
-        <button onClick={handleZoomOut} style={buttonStyle}>
-          −
-        </button>
-        <button onClick={handleCenter} style={buttonGrayStyle}>
-          Центрировать
-        </button>
-      </div>
 
       <div
         style={{
@@ -124,7 +56,7 @@ export default function WarehouseMap() {
         }}
       >
         <svg width={zones.length * cellWidth + 100} height={rows * cellHeight + 100}>
-          <g transform={`scale(${scale}) translate(${offset.x}, ${offset.y})`}>
+          <g>
             {/* Сетка зон */}
             {zones.map((zone, i) =>
               Array.from({ length: rows }).map((_, j) => {
@@ -248,26 +180,6 @@ export default function WarehouseMap() {
     </div>
   );
 }
-
-const buttonStyle = {
-  padding: "6px 12px",
-  marginRight: "6px",
-  backgroundColor: "#007bff",
-  color: "white",
-  border: "none",
-  borderRadius: "4px",
-  cursor: "pointer",
-};
-
-const buttonGrayStyle = {
-  padding: "6px 12px",
-  marginRight: "6px",
-  backgroundColor: "#6c757d",
-  color: "white",
-  border: "none",
-  borderRadius: "4px",
-  cursor: "pointer",
-};
 
 const tooltipStyle = (x, y) => ({
   position: "fixed",

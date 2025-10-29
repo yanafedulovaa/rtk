@@ -46,7 +46,8 @@ INSTALLED_APPS = [
     'warehouse',
     "corsheaders",
     'inventory',
-    'django_rest_passwordreset'
+    'django_rest_passwordreset',
+    'channels'
 ]
 
 MIDDLEWARE = [
@@ -210,3 +211,10 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 # Остальные параметры не нужны
 DEFAULT_FROM_EMAIL = 'test@local.dev'
 
+ASGI_APPLICATION = 'smart_warehouse.asgi.application'
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}
