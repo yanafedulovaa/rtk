@@ -8,7 +8,10 @@ import InventoryPredict from "./InventoryPredict";
 import RobotActivityChart from "../components/RobotActivityChart";
 
 const styles = {
-  container: { minHeight: "100vh", backgroundColor: "#f5f5f5" },
+  container: {
+    minHeight: "100vh",
+    backgroundColor: "#f5f5f5",
+  },
   main: {
     padding: "20px",
     display: "grid",
@@ -46,30 +49,128 @@ const styles = {
     display: "flex",
     flexDirection: "column",
   },
-  sectionTitle: { fontSize: "16px", fontWeight: "bold", color: "#333", marginBottom: "15px", paddingBottom: "8px", borderBottom: "1px solid #e0e0e0" },
-  statsGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "15px", marginBottom: "15px" },
-  statCard: { padding: "12px", border: "1px solid #e0e0e0", borderRadius: "6px", textAlign: "center" },
-  statValue: { fontSize: "24px", fontWeight: "bold", margin: "5px 0" },
-  statLabel: { fontSize: "12px", color: "#666", margin: 0 },
-  chartContainer: { flex: 1, minHeight: "200px", marginTop: "15px" },
-  tableContainer: { flex: 1, overflow: "auto" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: "12px" },
-  tableHeader: { backgroundColor: "#f8f9fa", position: "sticky", top: 0, zIndex: 1 },
-  tableHeaderCell: { padding: "8px", textAlign: "left", fontWeight: "bold", color: "#333", borderBottom: "1px solid #e0e0e0", fontSize: "11px" },
-  tableCell: { padding: "6px", borderBottom: "1px solid #e0e0e0", color: "#333", fontSize: "11px" },
-  statusBadge: { padding: "2px 6px", borderRadius: "10px", fontSize: "10px", fontWeight: "bold", textTransform: "uppercase" },
-  statusOk: { backgroundColor: "#d4edda", color: "#155724" },
-  statusLow: { backgroundColor: "#fff3cd", color: "#856404" },
-  statusCritical: { backgroundColor: "#f8d7da", color: "#721c24" },
-  controls: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "15px", paddingTop: "10px", borderTop: "1px solid #e0e0e0" },
-  pauseButton: { backgroundColor: "#6c757d", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "4px", cursor: "pointer", fontSize: "12px" },
-  websocketIndicator: { display: "flex", alignItems: "center", gap: "5px", fontSize: "12px", color: "#666" },
-  indicator: { width: "10px", height: "10px", borderRadius: "50%" },
+  sectionTitle: {
+    fontSize: "16px",
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: "15px",
+    paddingBottom: "8px",
+    borderBottom: "1px solid #e0e0e0",
+  },
+  statsGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "15px",
+    marginBottom: "15px",
+  },
+  statCard: {
+    padding: "12px",
+    border: "1px solid #e0e0e0",
+    borderRadius: "6px",
+    textAlign: "center",
+  },
+  statValue: {
+    fontSize: "24px",
+    fontWeight: "bold",
+    margin: "5px 0",
+  },
+  statLabel: {
+    fontSize: "12px",
+    color: "#666",
+    margin: 0,
+  },
+  chartContainer: {
+    flex: 1,
+    minHeight: "200px",
+    marginTop: "15px",
+  },
+  tableContainer: {
+    flex: 1,
+    overflow: "auto",
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontSize: "12px",
+  },
+  tableHeader: {
+    backgroundColor: "#f8f9fa",
+    position: "sticky",
+    top: 0,
+    zIndex: 1,
+  },
+  tableHeaderCell: {
+    padding: "8px",
+    textAlign: "left",
+    fontWeight: "bold",
+    color: "#333",
+    borderBottom: "1px solid #e0e0e0",
+    fontSize: "11px",
+  },
+  tableCell: {
+    padding: "6px",
+    borderBottom: "1px solid #e0e0e0",
+    color: "#333",
+    fontSize: "11px",
+  },
+  statusBadge: {
+    padding: "2px 6px",
+    borderRadius: "10px",
+    fontSize: "10px",
+    fontWeight: "bold",
+    textTransform: "uppercase",
+  },
+  statusOk: {
+    backgroundColor: "#d4edda",
+    color: "#155724",
+  },
+  statusLow: {
+    backgroundColor: "#fff3cd",
+    color: "#856404",
+  },
+  statusCritical: {
+    backgroundColor: "#f8d7da",
+    color: "#721c24",
+  },
+  controls: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: "15px",
+    paddingTop: "10px",
+    borderTop: "1px solid #e0e0e0",
+  },
+  pauseButton: {
+    backgroundColor: "#6c757d",
+    color: "#fff",
+    border: "none",
+    padding: "6px 12px",
+    borderRadius: "4px",
+    cursor: "pointer",
+    fontSize: "12px",
+  },
+  websocketIndicator: {
+    display: "flex",
+    alignItems: "center",
+    gap: "5px",
+    fontSize: "12px",
+    color: "#666",
+  },
+  indicator: {
+    width: "10px",
+    height: "10px",
+    borderRadius: "50%",
+  },
   indicatorOnline: { backgroundColor: "#28a745" },
   indicatorOffline: { backgroundColor: "#dc3545" },
-  indicatorReconnecting: { backgroundColor: "#ffc107" },
-  lastUpdated: { fontSize: "11px", color: "#666", fontStyle: "italic" },
+  indicatorReconnecting: { backgroundColor: "#6c757d" },
+  lastUpdated: {
+    fontSize: "11px",
+    color: "#666",
+    fontStyle: "italic",
+  },
 };
+
 
 export default function Dashboard() {
   const { access } = useContext(AuthContext);
@@ -78,43 +179,10 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [isPaused, setIsPaused] = useState(false);
-  const [websocketStatus, setWebsocketStatus] = useState("offline");
+  const [websocketStatus, setWebsocketStatus] = useState("online");
 
   useEffect(() => {
-    let ws;
-    let interval;
-
-    const connectWebSocket = () => {
-      setWebsocketStatus("reconnecting");
-      ws = new WebSocket("ws://localhost:8000/ws/dashboard/");
-
-      ws.onopen = () => {
-        setWebsocketStatus("online");
-      };
-
-      ws.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        if (message.type === "robot_update") {
-          setData((prev) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              robots: prev.robots.map((r) =>
-                r.id === message.data.robot_id ? { ...r, ...message.data } : r
-              ),
-            };
-          });
-          setLastUpdated(new Date().toLocaleTimeString());
-        }
-      };
-
-      ws.onclose = () => {
-        setWebsocketStatus("offline");
-        setTimeout(connectWebSocket, 5000);
-      };
-
-      ws.onerror = () => ws.close();
-    };
+    if (isPaused) return;
 
     const fetchDashboard = async () => {
       try {
@@ -124,23 +192,19 @@ export default function Dashboard() {
         setData(res.data);
         setError(null);
         setLastUpdated(new Date().toLocaleTimeString());
-      } catch {
+        setWebsocketStatus("online");
+      } catch (err) {
+        console.error(err);
         setError("Не удалось загрузить данные");
+        setWebsocketStatus("offline");
       } finally {
         setLoading(false);
       }
     };
 
-    if (!isPaused) {
-      fetchDashboard();
-      connectWebSocket();
-      interval = setInterval(fetchDashboard, 60000);
-    }
-
-    return () => {
-      if (ws) ws.close();
-      clearInterval(interval);
-    };
+    fetchDashboard();
+    const interval = setInterval(fetchDashboard, 5000);
+    return () => clearInterval(interval);
   }, [access, isPaused]);
 
   const getStatusBadge = (status) => {
@@ -150,7 +214,11 @@ export default function Dashboard() {
       critical: { label: "Критично", style: styles.statusCritical },
     };
     const statusInfo = statusMap[status?.toLowerCase()] || statusMap.ok;
-    return <span style={{ ...styles.statusBadge, ...statusInfo.style }}>{statusInfo.label}</span>;
+    return (
+      <span style={{ ...styles.statusBadge, ...statusInfo.style }}>
+        {statusInfo.label}
+      </span>
+    );
   };
 
   if (loading)
@@ -176,11 +244,13 @@ export default function Dashboard() {
       <Header />
       <Navigation />
       <main style={styles.main}>
+        {/* Карта склада */}
         <section style={styles.mapSection}>
           <h3 style={styles.sectionTitle}>Карта склада</h3>
           <WarehouseMap robots={data?.robots || []} />
         </section>
 
+        {/* Статистика */}
         <section style={styles.statsSection}>
           <h3 style={styles.sectionTitle}>Статистика в реальном времени</h3>
           <div style={styles.statsGrid}>
@@ -214,6 +284,8 @@ export default function Dashboard() {
           </div>
         </section>
 
+
+        {/* Последние сканирования */}
         <section style={styles.scansSection}>
           <h3 style={styles.sectionTitle}>Последние сканирования</h3>
           <div style={styles.tableContainer}>
@@ -240,7 +312,9 @@ export default function Dashboard() {
                       </td>
                       <td style={styles.tableCell}>{scan.product}</td>
                       <td style={styles.tableCell}>{scan.quantity}</td>
-                      <td style={styles.tableCell}>{getStatusBadge(scan.status)}</td>
+                      <td style={styles.tableCell}>
+                        {getStatusBadge(scan.status)}
+                      </td>
                     </tr>
                   );
                 })}
@@ -249,7 +323,10 @@ export default function Dashboard() {
           </div>
 
           <div style={styles.controls}>
-            <button style={styles.pauseButton} onClick={() => setIsPaused(!isPaused)}>
+            <button
+              style={styles.pauseButton}
+              onClick={() => setIsPaused(!isPaused)}
+            >
               {isPaused ? "Возобновить" : "Пауза"}
             </button>
             <div style={styles.websocketIndicator}>
@@ -265,10 +342,13 @@ export default function Dashboard() {
               />
               WebSocket
             </div>
-            {lastUpdated && <div style={styles.lastUpdated}>Обновлено: {lastUpdated}</div>}
+            {lastUpdated && (
+              <div style={styles.lastUpdated}>Обновлено: {lastUpdated}</div>
+            )}
           </div>
         </section>
 
+        {/* Предиктивная аналитика */}
         <InventoryPredict />
       </main>
     </div>
