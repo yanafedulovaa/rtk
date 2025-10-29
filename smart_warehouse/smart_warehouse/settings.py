@@ -86,13 +86,14 @@ WSGI_APPLICATION = 'smart_warehouse.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'smartwarehouse',       # имя базы
-        'USER': 'postgres',            # пользователь
-        'PASSWORD': 'marki51151',    # пароль
-        'HOST': 'localhost',                  # имя сервиса из docker-compose
+        'NAME': 'smart_warehouse',
+        'USER': 'postgres',
+        'PASSWORD': 'admin',
+        'HOST': 'localhost',
         'PORT': '5432',
     }
 }
+
 
 
 # Password validation
