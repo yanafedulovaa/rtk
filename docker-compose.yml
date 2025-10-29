@@ -1,33 +1,44 @@
-version: '3.8'
-
 services:
-  backend:
-    build: ./smart_warehouse
-    ports:
-      - "8000:8000"  # Django стандартный порт
-    volumes:
-      - ./backend:/app
+  db:
+    image: postgres:16
     environment:
-      DJANGO_SETTINGS_MODULE: smart_warehouse.settings
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: marki51151
+      POSTGRES_DB: smartwarehouse   # <--- здесь имя базы
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./smart_warehouse  # путь к твоему Django-проекту
+    volumes:
+      - ./smart_warehouse:/app  # локальная папка : папка внутри контейнера
+    working_dir: /app
     command: python manage.py runserver 0.0.0.0:8000
+    env_file:
+      - .env
+    depends_on:
+      - db
 
   frontend:
     build: ./frontend
-    ports:
-      - "3000:3000"
+    container_name: smart_warehouse-frontend
+    command: npm start
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    environment:
-      CHOKIDAR_USEPOLLING: "true"  # для hot reload на Windows/macOS
+    ports:
+      - "3000:3000"
     depends_on:
       - backend
 
   robot_emulator:
     build: ./robot_emulator
-    environment:
-      API_URL: http://backend:8000  # важно использовать порт Django
-      ROBOTS_COUNT: 3
-      UPDATE_INTERVAL: 5
+    container_name: smart_warehouse-robot_emulator
+    command: python emulator.py
+    volumes:
+      - ./robot_emulator:/app
     depends_on:
       - backend
+
+volumes:
+  pgdata:
