@@ -30,7 +30,7 @@ class InventoryHistory(models.Model):
         choices=[('OK', 'OK'), ('LOW_STOCK', 'LOW_STOCK'), ('CRITICAL', 'CRITICAL')]
     )
 
-    scanned_at = models.DateTimeField(null=False)
+    scanned_at = models.DateTimeField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property

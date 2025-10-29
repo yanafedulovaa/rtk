@@ -21,8 +21,11 @@ staticfiles/
 node_modules/
 build/
 dist/
+package-lock.json    # если хочешь, чтобы lock-файлы не отслеживались
 
 # Docker
 *.pid
 *.log
 smart_warehouse/.env
+.env                # глобальный .env в корне проекта
+

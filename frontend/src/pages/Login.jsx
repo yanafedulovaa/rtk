@@ -1,6 +1,7 @@
 import React, { useState, useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -174,9 +175,9 @@ export default function Login() {
               fontSize: 14,
             }}
           >
-            <a href="/forgot-password" style={{ color: "#007bff" }}>
-              Забыли пароль?
-            </a>
+            <Link to="/password-reset" style={{ color: "#007bff" }}>
+    Забыли пароль?
+  </Link>
           </div>
         </form>
       </div>

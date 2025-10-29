@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "react-svg-pan-zoom": "^3.13.1",
+    "recharts": "^3.3.0"
+  }
+}

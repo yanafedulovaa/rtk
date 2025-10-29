@@ -1,7 +1,11 @@
+import csv
 import io
 
 from django.db.models import F, Q
+from django.utils import timezone
+from django.utils.dateparse import parse_date
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from warehouse.models import InventoryHistory
@@ -12,161 +16,280 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from django.http import HttpResponse
 
+from products.models import Product
+from .models import InventoryCSVImport
+
+from datetime import datetime
 class InventoryPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
     max_page_size = 100
 
 
+from itertools import chain
+from operator import attrgetter
+
+def calculate_status(quantity):
+    if quantity is None:
+        return "-"
+    if quantity <= 5:
+        return "CRITICAL"
+    if quantity <= 20:
+        return "LOW_STOCK"
+    return "OK"
+
+
+def serialize_item(item, source):
+    # Универсальное преобразование для обеих моделей
+    return {
+        "product_id": item.get("product_id"),
+        "product_name": item.get("product_name") or item.get("product__name"),
+        "zone": item.get("zone"),
+        "quantity": item.get("quantity"),
+        "scanned_at": item.get("scanned_at"),
+        "status": item.get("status") or calculate_status(item.get("quantity")),
+        "source": source,
+        "row_number": item.get("row_number"),
+        "shelf_number": item.get("shelf_number"),
+        "created_at": item.get("created_at"),
+    }
+
+
 class InventoryHistoryView(APIView):
-    """
-    // Исторические данные
-    GET /api/inventory/history?from=date&to=date&zone=A&status=critical
-    Response: { total: number, items: [], pagination: {} }
-    """
 
     def get(self, request):
-        queryset = InventoryHistory.objects.all().order_by('-scanned_at')
-
-        from_date = request.GET.get('from')   # YYYY-MM-DD
+        from_date = request.GET.get('from')
         to_date = request.GET.get('to')
-        zone = request.GET.get('zone')        # например "A"
-        status_filter = request.GET.get('status')  # "OK", "LOW_STOCK", "CRITICAL"
-        search = request.GET.get('search')    # поиск по product_name или product_id
+        zone = request.GET.get('zone')
+        status_filter = request.GET.get('status')
+        search = request.GET.get('search')
+        ordering = request.GET.get('ordering') or '-scanned_at'
 
+        # --- Получаем QuerySet для обеих таблиц ---
+        qs1 = InventoryHistory.objects.all()
+        qs2 = InventoryCSVImport.objects.all()
+
+        # --- Фильтры по дате и зоне ---
         if from_date:
-            queryset = queryset.filter(scanned_at__date__gte=from_date)
+            qs1 = qs1.filter(scanned_at__date__gte=from_date)
+            qs2 = qs2.filter(scanned_at__date__gte=from_date)
         if to_date:
-            queryset = queryset.filter(scanned_at__date__lte=to_date)
+            qs1 = qs1.filter(scanned_at__date__lte=to_date)
+            qs2 = qs2.filter(scanned_at__date__lte=to_date)
         if zone:
-            queryset = queryset.filter(zone__iexact=zone)
-        if status_filter and status_filter.lower() != "all":
-            queryset = queryset.filter(status__iexact=status_filter)
+            qs1 = qs1.filter(zone__iexact=zone)
+            qs2 = qs2.filter(zone__iexact=zone)
+
+        # --- Унифицированный поиск ---
         if search:
-            queryset = queryset.filter(
-                Q(product__name__icontains=search) | Q(product_id__exact=search)
+            qs1 = qs1.filter(
+                Q(product__name__icontains=search) | Q(product__id__icontains=search)
+            )
+            qs2 = qs2.filter(
+                Q(product_name__icontains=search) | Q(product_id__icontains=search)
             )
 
-        ordering = request.GET.get('ordering')
-        if ordering:
-            queryset = queryset.order_by(ordering)
+        # --- Преобразуем InventoryHistory в словари ---
+        qs1_values = list(
+            qs1.values(
+                "product_id",
+                "product__name",
+                "zone",
+                "status",
+                "quantity",
+                "scanned_at",
+            )
+        )
+        for item in qs1_values:
+            item["product_name"] = item.pop("product__name")  # унификация
+            item["source"] = "history"
 
-        total_checks = queryset.count()
-        unique_products = queryset.values('product_id').distinct().count()
+        # --- Преобразуем InventoryCSVImport в словари ---
+        qs2_values = list(
+            qs2.values(
+                "product_id",
+                "product_name",
+                "quantity",
+                "zone",
+                "row_number",
+                "shelf_number",
+                "scanned_at",
+                "created_at",
+            )
+        )
+        for item in qs2_values:
+            qty = item.get("quantity")
+            if qty is None:
+                item["status"] = "-"
+            elif qty <= 5:
+                item["status"] = "CRITICAL"
+            elif qty <= 20:
+                item["status"] = "LOW_STOCK"
+            else:
+                item["status"] = "OK"
+            item["source"] = "csv"
 
-        discrepancies = queryset.exclude(expected_quantity=F('quantity')).count() if 'expected_quantity' in [f.name for f in InventoryHistory._meta.get_fields()] else 0
+        # --- Объединяем обе таблицы ---
+        combined = list(chain(qs1_values, qs2_values))
 
-        summary = {
-            "total_checks": total_checks,
-            "unique_products": unique_products,
-            "discrepancies": discrepancies,
-            "avg_time_per_zone": round(total_checks / 60, 2) if total_checks else 0
-        }
+        # --- Фильтруем по статусу после объединения ---
+        if status_filter and status_filter.lower() != "all":
+            combined = [
+                i for i in combined if i.get("status", "").lower() == status_filter.lower()
+            ]
 
+        # --- Сортировка ---
+        reverse = ordering.startswith("-")
+        field = ordering.lstrip("-")
+        combined.sort(key=lambda x: x.get(field), reverse=reverse)
+
+        # --- Пагинация ---
         paginator = InventoryPagination()
-        paginated_queryset = paginator.paginate_queryset(queryset, request)
-        serializer = InventoryItemSerializer(paginated_queryset, many=True)
-
-        pagination_info = {
-            'page': paginator.page.number,
-            'page_size': paginator.page.paginator.per_page,
-            'total_pages': paginator.page.paginator.num_pages,
-            'total_items': paginator.page.paginator.count,
-            'has_next': paginator.page.has_next(),
-            'has_previous': paginator.page.has_previous()
-        }
+        page = paginator.paginate_queryset(combined, request)
 
         response_data = {
-            "total": total_checks,
-            "items": serializer.data,
-            "summary": summary,
-            "pagination": pagination_info
+            "total": len(combined),
+            "items": page,
+            "summary": {
+                "total_checks": len(combined),
+                "unique_products": len({item["product_name"] for item in combined}),
+                "discrepancies": 0,
+                "avg_time_per_zone": round(len(combined) / 60, 2) if combined else 0
+            },
+            "pagination": {
+                "page": paginator.page.number,
+                "page_size": paginator.page.paginator.per_page,
+                "total_pages": paginator.page.paginator.num_pages,
+                "total_items": paginator.page.paginator.count,
+                "has_next": paginator.page.has_next(),
+                "has_previous": paginator.page.has_previous(),
+            },
         }
 
-        return Response(response_data, status=200)
-
+        return Response(response_data)
 
 class InventoryTrendView(APIView):
+    permission_classes = [IsAuthenticated]
     def get(self, request):
         product_filter = request.GET.get('products')
         if product_filter:
             products = product_filter.split(',')
-            queryset = InventoryHistory.objects.filter(product_id__in=products)
+            qs1 = InventoryHistory.objects.filter(product_id__in=products)
+            qs2 = InventoryCSVImport.objects.filter(product_id__in=products)
         else:
-            queryset = InventoryHistory.objects.all()
+            qs1 = InventoryHistory.objects.all()
+            qs2 = InventoryCSVImport.objects.all()
 
         data = {}
-        for product in queryset.values_list('product_id', flat=True).distinct():
-            records = queryset.filter(product_id=product).order_by('scanned_at')
-            data[product] = [
-                {'scanned_at': r.scanned_at, 'quantity': r.quantity} for r in records
-            ]
+
+        # Объединяем обе таблицы по product_id
+        all_products = set(qs1.values_list('product_id', flat=True)) | set(qs2.values_list('product_id', flat=True))
+        for product in all_products:
+            records = []
+
+            # История из InventoryHistory
+            for r in qs1.filter(product_id=product).order_by('scanned_at'):
+                if r.quantity is not None:
+                    records.append({'scanned_at': r.scanned_at, 'quantity': r.quantity})
+
+            # История из CSV
+            for r in qs2.filter(product_id=product).order_by('scanned_at'):
+                if r.quantity is not None:
+                    records.append({'scanned_at': r.scanned_at, 'quantity': r.quantity})
+
+            # Сортируем по времени
+            records.sort(key=lambda x: x['scanned_at'])
+            data[product] = records
 
         response = {
-            'products': list(data.keys()),
+            'products': list(all_products),
             'data': data
         }
-
         return Response(response)
 
 
 class InventoryExportMixin:
-    """ Общая логика фильтрации для экспорта """
+    """ Общая логика фильтрации для экспорта с поддержкой двух таблиц """
 
-    def get_filtered_queryset(self, request):
-        queryset = InventoryHistory.objects.all().order_by("-scanned_at")
+    def get_filtered_data(self, request):
+        """
+        Ожидаем в request.data список выбранных записей вида:
+        [{"id": 1, "source": "history"}, {"id": 5, "source": "csv"}]
+        """
+        selected = request.data.get("selected", [])
+        history_ids = [item["id"] for item in selected if item["source"] == "history"]
+        csv_ids = [item["id"] for item in selected if item["source"] == "csv"]
 
-        from_date = request.data.get("from")
-        to_date = request.data.get("to")
-        zone = request.data.get("zone")
-        status_filter = request.data.get("status")
-        search = request.data.get("search")
-        ordering = request.data.get("ordering")
-        ids = request.data.get("ids", [])
+        data = []
 
-        # Если выбраны конкретные ID — приоритетно используем их
-        if ids:
-            queryset = queryset.filter(id__in=ids)
-        else:
-            if from_date:
-                queryset = queryset.filter(scanned_at__date__gte=from_date)
-            if to_date:
-                queryset = queryset.filter(scanned_at__date__lte=to_date)
-            if zone:
-                queryset = queryset.filter(zone__iexact=zone)
-            if status_filter and status_filter.lower() != "all":
-                queryset = queryset.filter(status__iexact=status_filter)
-            if search:
-                queryset = queryset.filter(
-                    Q(product__name__icontains=search) | Q(product_id__icontains=search)
-                )
-            if ordering:
-                queryset = queryset.order_by(ordering)
+        if history_ids:
+            qs_history = InventoryHistory.objects.filter(id__in=history_ids)
+            for item in qs_history:
+                data.append({
+                    "product_id": item.product_id,
+                    "product_name": item.product.name if item.product else "",
+                    "zone": item.zone,
+                    "quantity": item.quantity,
+                    "status": item.status,
+                    "scanned_at": item.scanned_at,
+                    "source": "history",
+                })
 
-        return queryset
+        if csv_ids:
+            qs_csv = InventoryCSVImport.objects.filter(id__in=csv_ids)
+            for item in qs_csv:
+                # Вычисляем статус, если нужно
+                qty = item.quantity
+                if qty is None:
+                    status = "-"
+                elif qty <= 5:
+                    status = "CRITICAL"
+                elif qty <= 20:
+                    status = "LOW_STOCK"
+                else:
+                    status = "OK"
+
+                data.append({
+                    "product_id": item.product_id,
+                    "product_name": item.product_name,
+                    "zone": item.zone,
+                    "quantity": item.quantity,
+                    "status": status,
+                    "scanned_at": item.scanned_at,
+                    "source": "csv",
+                })
+
+        # Сортировка при желании
+        ordering = request.data.get("ordering", "-scanned_at")
+        reverse = ordering.startswith("-")
+        field = ordering.lstrip("-")
+        data.sort(key=lambda x: x.get(field), reverse=reverse)
+
+        return data
 
 
 class InventoryExportExcelView(InventoryExportMixin, APIView):
     def post(self, request):
-        queryset = self.get_filtered_queryset(request)
-        if not queryset.exists():
+        data = self.get_filtered_data(request)
+        if not data:
             return Response({"error": "Нет данных для экспорта"}, status=status.HTTP_400_BAD_REQUEST)
 
         wb = Workbook()
         ws = wb.active
         ws.title = "Inventory Export"
 
-        headers = ["ID", "Дата", "Зона", "Товар", "Кол-во", "Статус"]
+        headers = ["ID товара", "Дата", "Зона", "Товар", "Кол-во", "Статус", "Источник"]
         ws.append(headers)
 
-        for item in queryset:
+        for item in data:
             ws.append([
-                item.product_id,
-                item.scanned_at.strftime("%Y-%m-%d %H:%M:%S"),
-                item.zone,
-                item.product.name if item.product else "",
-                item.quantity,
-                item.status
+                item["product_id"],
+                item["scanned_at"].strftime("%Y-%m-%d %H:%M:%S") if item["scanned_at"] else "",
+                item["zone"],
+                item["product_name"],
+                item["quantity"],
+                item["status"],
+                item["source"]
             ])
 
         buffer = io.BytesIO()
@@ -180,11 +303,10 @@ class InventoryExportExcelView(InventoryExportMixin, APIView):
         response["Content-Disposition"] = 'attachment; filename="inventory_export.xlsx"'
         return response
 
-
 class InventoryExportPDFView(InventoryExportMixin, APIView):
     def post(self, request):
-        queryset = self.get_filtered_queryset(request)
-        if not queryset.exists():
+        data = self.get_filtered_data(request)
+        if not data:
             return Response({"error": "Нет данных для экспорта"}, status=status.HTTP_400_BAD_REQUEST)
 
         buffer = io.BytesIO()
@@ -192,22 +314,29 @@ class InventoryExportPDFView(InventoryExportMixin, APIView):
         width, height = A4
         y = height - 50
 
+        # Заголовок
         p.setFont("Helvetica-Bold", 14)
         p.drawString(50, y, "Отчёт по инвентаризации")
         y -= 30
 
-        p.setFont("Helvetica", 10)
-        headers = ["ID", "Дата", "Зона", "Товар", "Кол-во", "Статус"]
+        # Колонки
+        p.setFont("Helvetica-Bold", 10)
+        headers = ["ID товара", "Дата", "Зона", "Товар", "Кол-во", "Статус", "Источник"]
         p.drawString(50, y, " | ".join(headers))
         y -= 20
 
-        for item in queryset:
-            line = f"{item.product_id} | {item.scanned_at.strftime('%Y-%m-%d %H:%M:%S')} | {item.zone} | {item.product.name if item.product else ''} | {item.quantity} | {item.status}"
+        p.setFont("Helvetica", 10)
+        for item in data:
+            scanned_at = item["scanned_at"].strftime("%Y-%m-%d %H:%M:%S") if item["scanned_at"] else ""
+            line = f"{item['product_id']} | {scanned_at} | {item['zone']} | {item['product_name']} | {item['quantity']} | {item['status']} | {item['source']}"
             p.drawString(50, y, line)
             y -= 15
+
+            # Новая страница при нехватке места
             if y < 50:
                 p.showPage()
                 y = height - 50
+                p.setFont("Helvetica", 10)
 
         p.save()
         pdf = buffer.getvalue()
@@ -216,3 +345,74 @@ class InventoryExportPDFView(InventoryExportMixin, APIView):
         response = HttpResponse(pdf, content_type="application/pdf")
         response["Content-Disposition"] = 'attachment; filename="inventory_export.pdf"'
         return response
+
+
+class InventoryUploadView(APIView):
+    def post(self, request):
+        file = request.FILES.get('file')
+        if not file:
+            return Response({'error': 'Файл не предоставлен'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Проверяем кодировку
+        try:
+            decoded_file = file.read().decode('utf-8')
+        except UnicodeDecodeError:
+            return Response({'error': "Неверная кодировка, требуется UTF-8"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Парсим CSV
+        reader = csv.DictReader(io.StringIO(decoded_file), delimiter=';')
+
+        # Проверяем наличие обязательных колонок
+        required_columns = {"product_id", "product_name", "quantity", "zone", "date", "row", "shelf"}
+        if not required_columns.issubset(reader.fieldnames):
+            missing = required_columns - set(reader.fieldnames)
+            return Response({"error": f"Отсутствуют обязательные колонки: {', '.join(missing)}"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        created_count = 0
+        errors = []
+
+        for row in reader:
+            try:
+                # Извлекаем данные
+                product_id = row["product_id"].strip()
+                product_name = row["product_name"].strip()
+                quantity = int(row["quantity"])
+                zone = row["zone"].strip()
+                row_number = int(row["row"]) if row["row"] else None
+                shelf_number = int(row["shelf"]) if row["shelf"] else None
+
+                # Парсим дату и делаем её timezone-aware
+                scanned_date = parse_date(row["date"])
+                if scanned_date:
+                    scanned_at = datetime.combine(scanned_date, datetime.min.time())
+                    scanned_at = timezone.make_aware(scanned_at)
+                else:
+                    scanned_at = None
+
+                # Создаём запись в таблице InventoryCSVImport
+                InventoryCSVImport.objects.create(
+                    product_id=product_id,
+                    product_name=product_name,
+                    quantity=quantity,
+                    zone=zone,
+                    scanned_at=scanned_at,
+                    row_number=row_number,
+                    shelf_number=shelf_number,
+                    status='OK'  # можно менять, если нужно вычислять статус
+                )
+
+                created_count += 1
+
+            except Exception as e:
+                errors.append({"row": row, "error": str(e)})
+                continue
+
+        # Формируем ответ
+        response = {
+            "message": f"Успешно загружено {created_count} записей",
+        }
+        if errors:
+            response["errors"] = errors[:5]  # показываем первые 5 ошибок для отладки
+
+        return Response(response, status=status.HTTP_200_OK)
