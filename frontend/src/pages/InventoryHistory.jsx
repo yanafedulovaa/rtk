@@ -3,7 +3,6 @@ import axios from "axios";
 import Header from "../components/Header";
 import Navigation from "../components/Navigation";
 
-
 export default function InventoryHistoryPage() {
   const [items, setItems] = useState([]);
   const [summary, setSummary] = useState({});
@@ -18,11 +17,8 @@ export default function InventoryHistoryPage() {
     search: "",
   });
   const [sort, setSort] = useState({ field: "scanned_at", direction: "desc" });
-  const [selected, setSelected] = useState([]); // массив объектов {id, source}
+  const [selected, setSelected] = useState([]); // массив uniqueId
   const [selectAll, setSelectAll] = useState(false);
-  const [showTrendModal, setShowTrendModal] = useState(false);
-  const selectedProductIds = selected.map(s => items.find(i => i.id === s.id && i.source === s.source)?.product_id).filter(Boolean);
-
 
   useEffect(() => {
     fetchData();
@@ -37,8 +33,13 @@ export default function InventoryHistoryPage() {
         ordering: sort.direction === "asc" ? sort.field : `-${sort.field}`,
       };
       const res = await axios.get("http://localhost:8000/api/inventory/history/", { params });
-      // добавляем уникальный локальный id для каждой строки
-      setItems(res.data.items.map((i, idx) => ({ ...i, id: idx + 1 })));
+
+      setItems(res.data.items.map((i) => ({
+        ...i,
+        uniqueId: `${i.product_id}_${i.scanned_at}_${i.source}`,
+        id: i.id,
+      })));
+
       setSummary(res.data.summary);
       setPagination(res.data.pagination);
     } catch (err) {
@@ -65,32 +66,43 @@ export default function InventoryHistoryPage() {
 
   const handleSelect = (item) => {
     setSelected((prev) => {
-      const exists = prev.some(s => s.id === item.id && s.source === item.source);
+      const exists = prev.includes(item.uniqueId);
       if (exists) {
-        return prev.filter(s => !(s.id === item.id && s.source === item.source));
+        return prev.filter(id => id !== item.uniqueId);
       } else {
-        return [...prev, { id: item.id, source: item.source }];
+        return [...prev, item.uniqueId];
       }
     });
   };
 
+  // Выделение всех записей на текущей странице
   const handleSelectAllPage = () => {
-    const pageItems = items.map(item => ({ id: item.id, source: item.source }));
-    const allSelected = pageItems.every(pi => selected.some(s => s.id === pi.id && s.source === pi.source));
+    const pageIds = items.map(item => item.uniqueId);
+    const allSelected = pageIds.every(id => selected.includes(id));
+
     if (allSelected) {
-      setSelected(prev => prev.filter(s => !pageItems.some(pi => pi.id === s.id && pi.source === s.source)));
+      // Снимаем выделение со всех записей на странице
+      setSelected(prev => prev.filter(id => !pageIds.includes(id)));
     } else {
+      // Добавляем все записи со страницы
       setSelected(prev => [
         ...prev,
-        ...pageItems.filter(pi => !prev.some(s => s.id === pi.id && s.source === pi.source))
+        ...pageIds.filter(id => !prev.includes(id))
       ]);
     }
   };
 
+  // Выделение всех записей в таблице (включая невидимые)
   const handleSelectAllTable = () => {
-    setSelectAll(prev => !prev);
-    if (!selectAll) {
-      setSelected([]); // при выборе всех очищаем локальный selected
+    const newSelectAll = !selectAll;
+    setSelectAll(newSelectAll);
+
+    if (newSelectAll) {
+      // При выделении всех очищаем selected, так как будем использовать флаг selectAll
+      setSelected([]);
+    } else {
+      // При снятии выделения очищаем selected
+      setSelected([]);
     }
   };
 
@@ -99,16 +111,35 @@ export default function InventoryHistoryPage() {
     setSelectAll(false);
   };
 
+  // Проверка, выделен ли конкретный элемент
+  const isItemSelected = (item) => {
+    if (selectAll) return true;
+    return selected.includes(item.uniqueId);
+  };
+
+  // Проверка, выделены ли все элементы на текущей странице
+  const isAllPageSelected = () => {
+    if (selectAll) return true;
+    const pageIds = items.map(item => item.uniqueId);
+    return pageIds.length > 0 && pageIds.every(id => selected.includes(id));
+  };
+
   const exportData = async (format) => {
     try {
-      if (!selected.length && !selectAll) {
+      const isAll = selectAll;
+      if (!selected.length && !isAll) {
         alert("Выберите хотя бы одну запись для экспорта!");
         return;
       }
 
-      const payload = selectAll
+      const payload = isAll
         ? { all: true, filters }
-        : { selected };
+        : {
+            selected: selected.map(uniqueId => {
+              const item = items.find(i => i.uniqueId === uniqueId);
+              return item ? { id: item.id, source: item.source } : null;
+            }).filter(Boolean)
+          };
 
       const res = await axios.post(
         `http://localhost:8000/api/inventory/export/${format}/`,
@@ -169,9 +200,9 @@ export default function InventoryHistoryPage() {
                 <th style={{ width: "40px" }}>
                   <input
                     type="checkbox"
-                    checked={selectAll}
-                    onChange={handleSelectAllTable}
-                    title={selectAll ? "Снять выделение со всех записей" : "Выбрать все записи в таблице"}
+                    checked={isAllPageSelected()}
+                    onChange={handleSelectAllPage}
+                    title="Выбрать все записи на странице"
                   />
                 </th>
                 <th onClick={() => handleSort("product_id")} style={{ cursor: "pointer" }}>ID {getSortSymbol("product_id")}</th>
@@ -186,12 +217,13 @@ export default function InventoryHistoryPage() {
             <tbody>
               {items.length ? (
                 items.map((item) => (
-                  <tr key={`${item.id}_${item.source}`}>
+                  <tr key={item.uniqueId}>
                     <td>
                       <input
                         type="checkbox"
-                        checked={selectAll || selected.some(s => s.id === item.id && s.source === item.source)}
+                        checked={isItemSelected(item)}
                         onChange={() => handleSelect(item)}
+                        disabled={selectAll}
                       />
                     </td>
                     <td>{item.product_id}</td>

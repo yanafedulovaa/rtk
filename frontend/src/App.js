@@ -39,7 +39,7 @@ function App() {
           />
 
           {/* 🔸 Редирект на /dashboard по умолчанию */}
-          <Route path="*" element={<Navigate to="/dashboard" />} />
+          <Route path="*" element={<Navigate to="/login" />} />
           <Route path="/password-reset" element={<PasswordResetRequest />} />
           <Route path="/reset-password-confirm" element={<ResetPasswordConfirm />} />
         </Routes>

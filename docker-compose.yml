@@ -3,21 +3,45 @@ services:
     image: postgres:16
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: marki51151
-      POSTGRES_DB: smartwarehouse   # <--- здесь имя базы
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: smartwarehouse
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
-    build: ./smart_warehouse  # путь к твоему Django-проекту
-    volumes:
-      - ./smart_warehouse:/app  # локальная папка : папка внутри контейнера
+    build: ./smart_warehouse
+    ports:
+      - "8000:8000"
+#    volumes:
+#      - ./smart_warehouse:/app
     working_dir: /app
-    command: python manage.py runserver 0.0.0.0:8000
-    env_file:
-      - .env
+    command: sh -c "python manage.py migrate && daphne -b 0.0.0.0 -p 8000 smart_warehouse.asgi:application"
+    environment:
+      DB_HOST: db
+      DB_NAME: smartwarehouse
+      DB_USER: postgres
+      DB_PASSWORD: admin
+      DB_PORT: 5432
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   frontend:
     build: ./frontend
@@ -37,6 +61,8 @@ services:
     command: python emulator.py
     volumes:
       - ./robot_emulator:/app
+    environment:
+      BACKEND_URL: http://backend:8000
     depends_on:
       - backend
 

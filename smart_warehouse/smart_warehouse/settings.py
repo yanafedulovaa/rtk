@@ -90,8 +90,8 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'smartwarehouse',
         'USER': 'postgres',
-        'PASSWORD': 'marki51151',
-        'HOST': 'localhost',
+        'PASSWORD': 'admin',
+        'HOST': 'db',
         'PORT': '5432',
     }
 }
@@ -219,6 +219,9 @@ ASGI_APPLICATION = 'smart_warehouse.asgi.application'
 # ВАЖНО: Настройка Channel Layers (используем InMemoryChannelLayer для разработки)
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
-    }
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("redis", 6379)],
+        },
+    },
 }

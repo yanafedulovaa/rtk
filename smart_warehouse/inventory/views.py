@@ -1,9 +1,12 @@
 import csv
 import io
+import os
 
 from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
@@ -92,6 +95,7 @@ class InventoryHistoryView(APIView):
         # --- Преобразуем InventoryHistory в словари ---
         qs1_values = list(
             qs1.values(
+                'id',
                 "product_id",
                 "product__name",
                 "zone",
@@ -107,6 +111,7 @@ class InventoryHistoryView(APIView):
         # --- Преобразуем InventoryCSVImport в словари ---
         qs2_values = list(
             qs2.values(
+                'id',
                 "product_id",
                 "product_name",
                 "quantity",
@@ -213,18 +218,44 @@ class InventoryExportMixin:
 
     def get_filtered_data(self, request):
         """
-        Ожидаем в request.data список выбранных записей вида:
-        [{"id": 1, "source": "history"}, {"id": 5, "source": "csv"}]
+        Ожидаем либо:
+        - список выбранных записей: [{"id": 1, "source": "history"}, ...]
+        - или all=True + filters
         """
-        selected = request.data.get("selected", [])
-        history_ids = [item["id"] for item in selected if item["source"] == "history"]
-        csv_ids = [item["id"] for item in selected if item["source"] == "csv"]
+        if request.data.get("all"):
+            # Экспорт всех записей по фильтрам
+            filters = request.data.get("filters", {})
+            from_date = filters.get("from")
+            to_date = filters.get("to")
+            zone = filters.get("zone")
+            status_filter = filters.get("status")
+            search = filters.get("search")
 
-        data = []
+            # Получаем все записи из обеих таблиц
+            qs1 = InventoryHistory.objects.all()
+            qs2 = InventoryCSVImport.objects.all()
 
-        if history_ids:
-            qs_history = InventoryHistory.objects.filter(id__in=history_ids)
-            for item in qs_history:
+            if from_date:
+                qs1 = qs1.filter(scanned_at__date__gte=from_date)
+                qs2 = qs2.filter(scanned_at__date__gte=from_date)
+            if to_date:
+                qs1 = qs1.filter(scanned_at__date__lte=to_date)
+                qs2 = qs2.filter(scanned_at__date__lte=to_date)
+            if zone:
+                qs1 = qs1.filter(zone__iexact=zone)
+                qs2 = qs2.filter(zone__iexact=zone)
+
+            if search:
+                qs1 = qs1.filter(
+                    Q(product__name__icontains=search) | Q(product__id__icontains=search)
+                )
+                qs2 = qs2.filter(
+                    Q(product_name__icontains=search) | Q(product_id__icontains=search)
+                )
+
+            # Сериализация
+            data = []
+            for item in qs1:
                 data.append({
                     "product_id": item.product_id,
                     "product_name": item.product.name if item.product else "",
@@ -234,11 +265,7 @@ class InventoryExportMixin:
                     "scanned_at": item.scanned_at,
                     "source": "history",
                 })
-
-        if csv_ids:
-            qs_csv = InventoryCSVImport.objects.filter(id__in=csv_ids)
-            for item in qs_csv:
-                # Вычисляем статус, если нужно
+            for item in qs2:
                 qty = item.quantity
                 if qty is None:
                     status = "-"
@@ -258,8 +285,51 @@ class InventoryExportMixin:
                     "scanned_at": item.scanned_at,
                     "source": "csv",
                 })
+        else:
+            # Обычный экспорт выбранных записей
+            selected = request.data.get("selected", [])
+            data = []
 
-        # Сортировка при желании
+            history_ids = [item["id"] for item in selected if item["source"] == "history"]
+            csv_ids = [item["id"] for item in selected if item["source"] == "csv"]
+
+            if history_ids:
+                qs_history = InventoryHistory.objects.filter(id__in=history_ids)
+                for item in qs_history:
+                    data.append({
+                        "product_id": item.product_id,
+                        "product_name": item.product.name if item.product else "",
+                        "zone": item.zone,
+                        "quantity": item.quantity,
+                        "status": item.status,
+                        "scanned_at": item.scanned_at,
+                        "source": "history",
+                    })
+
+            if csv_ids:
+                qs_csv = InventoryCSVImport.objects.filter(id__in=csv_ids)
+                for item in qs_csv:
+                    qty = item.quantity
+                    if qty is None:
+                        status = "-"
+                    elif qty <= 5:
+                        status = "CRITICAL"
+                    elif qty <= 20:
+                        status = "LOW_STOCK"
+                    else:
+                        status = "OK"
+
+                    data.append({
+                        "product_id": item.product_id,
+                        "product_name": item.product_name,
+                        "zone": item.zone,
+                        "quantity": item.quantity,
+                        "status": status,
+                        "scanned_at": item.scanned_at,
+                        "source": "csv",
+                    })
+
+        # Сортировка
         ordering = request.data.get("ordering", "-scanned_at")
         reverse = ordering.startswith("-")
         field = ordering.lstrip("-")
@@ -314,29 +384,32 @@ class InventoryExportPDFView(InventoryExportMixin, APIView):
         width, height = A4
         y = height - 50
 
+        # ✅ Регистрируем шрифт с кириллицей
+        font_path = os.path.join(os.path.dirname(__file__), "DejaVuSans.ttf")
+        pdfmetrics.registerFont(TTFont("DejaVuSans", font_path))
+        p.setFont("DejaVuSans", 12)
+
         # Заголовок
-        p.setFont("Helvetica-Bold", 14)
+        p.setFont("DejaVuSans", 14)
         p.drawString(50, y, "Отчёт по инвентаризации")
         y -= 30
 
         # Колонки
-        p.setFont("Helvetica-Bold", 10)
+        p.setFont("DejaVuSans", 10)
         headers = ["ID товара", "Дата", "Зона", "Товар", "Кол-во", "Статус", "Источник"]
         p.drawString(50, y, " | ".join(headers))
         y -= 20
 
-        p.setFont("Helvetica", 10)
         for item in data:
             scanned_at = item["scanned_at"].strftime("%Y-%m-%d %H:%M:%S") if item["scanned_at"] else ""
             line = f"{item['product_id']} | {scanned_at} | {item['zone']} | {item['product_name']} | {item['quantity']} | {item['status']} | {item['source']}"
             p.drawString(50, y, line)
             y -= 15
 
-            # Новая страница при нехватке места
             if y < 50:
                 p.showPage()
+                p.setFont("DejaVuSans", 10)
                 y = height - 50
-                p.setFont("Helvetica", 10)
 
         p.save()
         pdf = buffer.getvalue()
@@ -345,7 +418,6 @@ class InventoryExportPDFView(InventoryExportMixin, APIView):
         response = HttpResponse(pdf, content_type="application/pdf")
         response["Content-Disposition"] = 'attachment; filename="inventory_export.pdf"'
         return response
-
 
 class InventoryUploadView(APIView):
     def post(self, request):
