@@ -33,6 +33,7 @@ ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'backend']
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -87,9 +88,9 @@ WSGI_APPLICATION = 'smart_warehouse.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'smart_warehouse',
+        'NAME': 'smartwarehouse',
         'USER': 'postgres',
-        'PASSWORD': 'admin',
+        'PASSWORD': 'marki51151',
         'HOST': 'localhost',
         'PORT': '5432',
     }
@@ -212,8 +213,10 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 # Остальные параметры не нужны
 DEFAULT_FROM_EMAIL = 'test@local.dev'
 
+# Настройка ASGI
 ASGI_APPLICATION = 'smart_warehouse.asgi.application'
 
+# ВАЖНО: Настройка Channel Layers (используем InMemoryChannelLayer для разработки)
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels.layers.InMemoryChannelLayer"
