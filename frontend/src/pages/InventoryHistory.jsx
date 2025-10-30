@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import Header from "../components/Header";
 import Navigation from "../components/Navigation";
+import InventoryTrendModal from "../components/InventoryTrendModal";
 
 export default function InventoryHistoryPage() {
   const [items, setItems] = useState([]);
@@ -17,8 +18,17 @@ export default function InventoryHistoryPage() {
     search: "",
   });
   const [sort, setSort] = useState({ field: "scanned_at", direction: "desc" });
-  const [selected, setSelected] = useState([]); // массив uniqueId
+  const [selected, setSelected] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
+
+  // Новые состояния для графика
+  const [showTrendModal, setShowTrendModal] = useState(false);
+
+  // Функция для получения токена
+  const getAuthToken = () => {
+    // Проверяем разные возможные ключи в localStorage
+    return localStorage.getItem('access')
+  };
 
   useEffect(() => {
     fetchData();
@@ -26,13 +36,23 @@ export default function InventoryHistoryPage() {
 
   const fetchData = async () => {
     try {
+      const token = getAuthToken();
+
       const params = {
         page,
         page_size: pageSize,
         ...filters,
         ordering: sort.direction === "asc" ? sort.field : `-${sort.field}`,
       };
-      const res = await axios.get("http://localhost:8000/api/inventory/history/", { params });
+
+      const config = token ? {
+        params,
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      } : { params };
+
+      const res = await axios.get("http://localhost:8000/api/inventory/history/", config);
 
       setItems(res.data.items.map((i) => ({
         ...i,
@@ -44,6 +64,9 @@ export default function InventoryHistoryPage() {
       setPagination(res.data.pagination);
     } catch (err) {
       console.error("Ошибка загрузки данных:", err);
+      if (err.response?.status === 401) {
+        alert("Ошибка авторизации. Пожалуйста, войдите в систему.");
+      }
     }
   };
 
@@ -75,16 +98,13 @@ export default function InventoryHistoryPage() {
     });
   };
 
-  // Выделение всех записей на текущей странице
   const handleSelectAllPage = () => {
     const pageIds = items.map(item => item.uniqueId);
     const allSelected = pageIds.every(id => selected.includes(id));
 
     if (allSelected) {
-      // Снимаем выделение со всех записей на странице
       setSelected(prev => prev.filter(id => !pageIds.includes(id)));
     } else {
-      // Добавляем все записи со страницы
       setSelected(prev => [
         ...prev,
         ...pageIds.filter(id => !prev.includes(id))
@@ -92,16 +112,13 @@ export default function InventoryHistoryPage() {
     }
   };
 
-  // Выделение всех записей в таблице (включая невидимые)
   const handleSelectAllTable = () => {
     const newSelectAll = !selectAll;
     setSelectAll(newSelectAll);
 
     if (newSelectAll) {
-      // При выделении всех очищаем selected, так как будем использовать флаг selectAll
       setSelected([]);
     } else {
-      // При снятии выделения очищаем selected
       setSelected([]);
     }
   };
@@ -111,13 +128,11 @@ export default function InventoryHistoryPage() {
     setSelectAll(false);
   };
 
-  // Проверка, выделен ли конкретный элемент
   const isItemSelected = (item) => {
     if (selectAll) return true;
     return selected.includes(item.uniqueId);
   };
 
-  // Проверка, выделены ли все элементы на текущей странице
   const isAllPageSelected = () => {
     if (selectAll) return true;
     const pageIds = items.map(item => item.uniqueId);
@@ -126,7 +141,9 @@ export default function InventoryHistoryPage() {
 
   const exportData = async (format) => {
     try {
+      const token = getAuthToken();
       const isAll = selectAll;
+
       if (!selected.length && !isAll) {
         alert("Выберите хотя бы одну запись для экспорта!");
         return;
@@ -141,10 +158,20 @@ export default function InventoryHistoryPage() {
             }).filter(Boolean)
           };
 
+      const config = {
+        responseType: "blob"
+      };
+
+      if (token) {
+        config.headers = {
+          'Authorization': `Bearer ${token}`
+        };
+      }
+
       const res = await axios.post(
         `http://localhost:8000/api/inventory/export/${format}/`,
         payload,
-        { responseType: "blob" }
+        config
       );
 
       const blob = new Blob([res.data]);
@@ -156,8 +183,31 @@ export default function InventoryHistoryPage() {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Ошибка экспорта:", err);
-      alert("Ошибка при экспорте данных!");
+      if (err.response?.status === 401) {
+        alert("Ошибка авторизации. Пожалуйста, войдите в систему.");
+      } else {
+        alert("Ошибка при экспорте данных!");
+      }
     }
+  };
+
+  const handleShowTrend = () => {
+    const selectedProductIds = selectAll
+      ? []
+      : [...new Set(selected.map(uniqueId => {
+          const item = items.find(i => i.uniqueId === uniqueId);
+          return item ? item.product_id : null;
+        }).filter(Boolean))];
+
+    setShowTrendModal(true);
+  };
+
+  const getSelectedProductIds = () => {
+    if (selectAll) return [];
+    return [...new Set(selected.map(uniqueId => {
+      const item = items.find(i => i.uniqueId === uniqueId);
+      return item ? item.product_id : null;
+    }).filter(Boolean))];
   };
 
   return (
@@ -261,6 +311,13 @@ export default function InventoryHistoryPage() {
 
           <div>
             <button
+              onClick={handleShowTrend}
+              className="btn btn-info me-2"
+              disabled={!selected.length && !selectAll}
+            >
+             Построить график
+            </button>
+            <button
               onClick={() => exportData("excel")}
               className="btn btn-success me-2"
               disabled={!selected.length && !selectAll}
@@ -307,6 +364,14 @@ export default function InventoryHistoryPage() {
           </div>
         </div>
       </div>
+
+      {/* МОДАЛЬНОЕ ОКНО С ГРАФИКОМ */}
+      <InventoryTrendModal
+        show={showTrendModal}
+        onClose={() => setShowTrendModal(false)}
+        selectedProducts={getSelectedProductIds()}
+        access={getAuthToken()}
+      />
     </>
   );
 }

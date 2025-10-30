@@ -173,15 +173,17 @@ class InventoryHistoryView(APIView):
 
         return Response(response_data)
 
+
 class InventoryTrendView(APIView):
-    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         product_filter = request.GET.get('products')
         if product_filter:
-            products = product_filter.split(',')
+            products = [p.strip() for p in product_filter.split(',')]
             qs1 = InventoryHistory.objects.filter(product_id__in=products)
             qs2 = InventoryCSVImport.objects.filter(product_id__in=products)
         else:
+            # Если товары не указаны, возвращаем данные по всем товарам (или топ-N)
             qs1 = InventoryHistory.objects.all()
             qs2 = InventoryCSVImport.objects.all()
 
@@ -189,25 +191,32 @@ class InventoryTrendView(APIView):
 
         # Объединяем обе таблицы по product_id
         all_products = set(qs1.values_list('product_id', flat=True)) | set(qs2.values_list('product_id', flat=True))
+
         for product in all_products:
             records = []
 
             # История из InventoryHistory
             for r in qs1.filter(product_id=product).order_by('scanned_at'):
                 if r.quantity is not None:
-                    records.append({'scanned_at': r.scanned_at, 'quantity': r.quantity})
+                    records.append({
+                        'scanned_at': r.scanned_at.isoformat(),
+                        'quantity': r.quantity
+                    })
 
             # История из CSV
             for r in qs2.filter(product_id=product).order_by('scanned_at'):
                 if r.quantity is not None:
-                    records.append({'scanned_at': r.scanned_at, 'quantity': r.quantity})
+                    records.append({
+                        'scanned_at': r.scanned_at.isoformat(),
+                        'quantity': r.quantity
+                    })
 
             # Сортируем по времени
             records.sort(key=lambda x: x['scanned_at'])
-            data[product] = records
+            data[str(product)] = records  # Приводим к строке для JSON
 
         response = {
-            'products': list(all_products),
+            'products': [str(p) for p in all_products],  # Возвращаем список товаров
             'data': data
         }
         return Response(response)

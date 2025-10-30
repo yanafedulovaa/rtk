@@ -91,7 +91,8 @@ DATABASES = {
         'NAME': 'smartwarehouse',
         'USER': 'postgres',
         'PASSWORD': 'admin',
-        'HOST': 'db',
+        # 'HOST': 'db', # (докер)
+        'HOST': 'localhost',
         'PORT': '5432',
     }
 }
@@ -206,22 +207,20 @@ AUTHENTICATION_BACKENDS = [
 load_dotenv()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-
-# Локальная разработка — письма выводятся в консоль
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-# Остальные параметры не нужны
+
 DEFAULT_FROM_EMAIL = 'test@local.dev'
 
-# Настройка ASGI
+
 ASGI_APPLICATION = 'smart_warehouse.asgi.application'
 
-# ВАЖНО: Настройка Channel Layers (используем InMemoryChannelLayer для разработки)
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("redis", 6379)],
+            "hosts": [("127.0.0.1", 6379)], #если с докером то 'redis'
         },
     },
 }
