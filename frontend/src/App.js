@@ -1,24 +1,23 @@
 import React from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard"; // Страница сбора данных
-import InventoryHistory from "./pages/InventoryHistory"; // 🔹 добавь импорт
+import Dashboard from "./pages/Dashboard";
+import InventoryHistory from "./pages/InventoryHistory";
 import { AuthProvider } from "./context/AuthContext";
 import PrivateRoute from "./components/PrivateRoute";
 import PasswordResetRequest from "./components/PasswordResetRequest";
 import ResetPasswordConfirm from "./components/ResetPasswordConfirm";
-
 
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <Routes>
-          {/* Страница входа */}
           <Route path="/login" element={<Login />} />
 
-          {/* Главная страница (сбор данных) */}
           <Route
             path="/dashboard"
             element={
@@ -28,7 +27,6 @@ function App() {
             }
           />
 
-          {/* 🔹 Страница исторических данных */}
           <Route
             path="/history"
             element={
@@ -38,13 +36,25 @@ function App() {
             }
           />
 
-          {/* 🔸 Редирект на /dashboard по умолчанию */}
-          <Route path="*" element={<Navigate to="/login" />} />
           <Route path="/password-reset" element={<PasswordResetRequest />} />
           <Route path="/reset-password-confirm" element={<ResetPasswordConfirm />} />
+          <Route path="*" element={<Navigate to="/login" />} />
         </Routes>
 
 
+        <ToastContainer
+          position="top-right"
+          autoClose={3000}
+          hideProgressBar={false}
+          newestOnTop={true}
+          closeOnClick
+          rtl={false}
+          pauseOnFocusLoss
+          draggable
+          pauseOnHover
+          theme="light"
+          style={{ zIndex: 9999 }}
+        />
       </AuthProvider>
     </BrowserRouter>
   );

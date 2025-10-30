@@ -15,7 +15,8 @@ import {
 import { CloudUpload } from "@mui/icons-material";
 import { useDropzone } from "react-dropzone";
 import Papa from "papaparse";
-import api from "../api"; // твой axios экземпляр
+import { toast } from 'react-toastify';
+import api from "../api";
 
 const style = {
   position: 'absolute',
@@ -30,55 +31,117 @@ const style = {
 };
 
 export default function CsvUploadModal({ open, onClose }) {
-  const [file, setFile] = useState(null);        // сам CSV
-  const [fileData, setFileData] = useState([]);  // первые 5 строк для предпросмотра
+  const [file, setFile] = useState(null);
+  const [fileData, setFileData] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
-    "text/csv": [".csv"]
-  },
+      "text/csv": [".csv"]
+    },
     onDrop: (acceptedFiles) => {
+      if (acceptedFiles.length === 0) {
+        toast.error('Пожалуйста, выберите CSV файл');
+        return;
+      }
+
       const csvFile = acceptedFiles[0];
-      setFile(csvFile); // сохраняем файл
+      setFile(csvFile);
+
+      toast.info(`Файл выбран: ${csvFile.name}`);
+
       Papa.parse(csvFile, {
         header: true,
         delimiter: ";",
         skipEmptyLines: true,
         complete: (results) => {
-            console.log("Parsed keys:", Object.keys(results.data[0]));
-    console.log("First 3 rows:", results.data.slice(0, 3));
-          setFileData(results.data.slice(0, 5)); // первые 5 строк
+          console.log("Parsed keys:", Object.keys(results.data[0]));
+          console.log("First 3 rows:", results.data.slice(0, 3));
+
+          if (results.data.length === 0) {
+            toast.warning('CSV файл пустой');
+            return;
+          }
+
+          setFileData(results.data.slice(0, 5));
+          toast.success(`Предпросмотр готов (${results.data.length} записей)`);
         },
+        error: (error) => {
+          toast.error(`Ошибка парсинга CSV: ${error.message}`);
+        }
       });
     },
   });
 
-const handleUpload = async () => {
-  if (!file) return;
-  setLoading(true);
-  const formData = new FormData();
-  formData.append("file", file);
-
-  try {
-    const res = await api.post("/inventory/upload/", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
-
-    console.log(res.data.message);
-
-    // Добавляем вывод ошибок сервера
-    if (res.data.errors?.length) {
-      console.warn("Ошибки при загрузке первых 5 строк:", res.data.errors);
+  const handleUpload = async () => {
+    if (!file) {
+      toast.warning('Сначала выберите файл');
+      return;
     }
 
-    onClose();
-  } catch (err) {
-    console.error(err.response?.data);
-  } finally {
-    setLoading(false);
-  }
-};
+    setLoading(true);
+
+    const loadingToastId = toast.loading('Загрузка файла на сервер...');
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await api.post("/inventory/upload/", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      toast.dismiss(loadingToastId);
+
+      console.log(res.data.message);
+
+      if (res.data.errors?.length > 0) {
+        const errorCount = res.data.errors.length;
+        toast.warning(
+          `Загружено с предупреждениями. Ошибок: ${errorCount}`,
+          {
+            autoClose: 5000,
+            position: "top-center"
+          }
+        );
+        console.warn("Ошибки при загрузке:", res.data.errors);
+      } else {
+        const recordsCount = res.data.records_imported || res.data.count || 'все';
+        toast.success(
+          `CSV успешно загружен. Обработано записей: ${recordsCount}`,
+          {
+            autoClose: 4000,
+            position: "top-center"
+          }
+        );
+      }
+
+      setTimeout(() => {
+        onClose();
+        window.location.reload();
+      }, 1500);
+
+    } catch (err) {
+      toast.dismiss(loadingToastId);
+
+      console.error(err.response?.data);
+
+      const errorMessage = err.response?.data?.detail
+        || err.response?.data?.error
+        || err.response?.data?.message
+        || 'Неизвестная ошибка';
+
+      toast.error(
+        `Ошибка загрузки: ${errorMessage}`,
+        {
+          autoClose: 6000,
+          position: "top-center"
+        }
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <Modal open={open} onClose={onClose}>
