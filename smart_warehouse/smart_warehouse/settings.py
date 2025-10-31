@@ -48,7 +48,9 @@ INSTALLED_APPS = [
     "corsheaders",
     'inventory',
     'django_rest_passwordreset',
-    'channels'
+    'channels',
+    'silk',
+    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -60,6 +62,18 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     "corsheaders.middleware.CorsMiddleware",
+    'silk.middleware.SilkyMiddleware',
+]
+
+# Опционально: ограничьте сбор данных
+SILKY_PYTHON_PROFILER = True
+SILKY_MAX_REQUEST_BODY_SIZE = 1024  # 1KB
+SILKY_MAX_RESPONSE_BODY_SIZE = 1024
+SILKY_INTERCEPT_PERCENT = 100  # 100% запросов в dev, 10% в prod
+
+
+INTERNAL_IPS = [
+    "127.0.0.1",
 ]
 
 ROOT_URLCONF = 'smart_warehouse.urls'
@@ -97,10 +111,6 @@ DATABASES = {
     }
 }
 
-
-
-# Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -190,7 +200,8 @@ REST_FRAMEWORK = {
         # 'robots.authentication.RobotJWTAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
-    )
+    ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 CORS_ALLOWED_ORIGINS = [
