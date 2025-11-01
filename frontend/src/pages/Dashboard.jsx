@@ -16,19 +16,53 @@ const styles = {
   main: {
     padding: "20px",
     display: "grid",
-    gridTemplateColumns: "2fr 1fr",
-    gridTemplateRows: "auto auto",
+    gridTemplateColumns: "1.2fr 1.6fr", // Карта уже - было 2fr
+    gridTemplateRows: "auto auto auto",
     gap: "20px",
     height: "calc(100vh - 120px)",
+    minHeight: 0,
   },
   mapSection: {
     gridColumn: "1",
-    gridRow: "1 / span 2",
+    gridRow: "1 / span 2", // Карта занимает первые 2 ряда
     backgroundColor: "white",
     borderRadius: "8px",
     padding: "20px",
     boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+    display: "flex",
+    flexDirection: "column",
+    minHeight: 0,
     overflow: "hidden",
+  },
+  mapContainer: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    minHeight: 0,
+    marginBottom: "15px",
+    overflow: "hidden",
+  },
+  mapWrapper: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+  },
+  legendContainer: {
+    marginTop: "10px",
+    paddingTop: "10px",
+    borderTop: "1px solid #e0e0e0",
+    flexShrink: 0,
+  },
+  robotsTableSection: {
+    marginTop: "10px",
+    paddingTop: "10px",
+    borderTop: "1px solid #e0e0e0",
+    flexShrink: 0,
+    maxHeight: "150px",
+    overflowY: "auto",
   },
   statsSection: {
     gridColumn: "2",
@@ -39,16 +73,20 @@ const styles = {
     boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
     display: "flex",
     flexDirection: "column",
+    minHeight: 0,
+    overflow: "hidden",
   },
   scansSection: {
     gridColumn: "2",
-    gridRow: "2",
+    gridRow: "2 / span 2",
     backgroundColor: "white",
     borderRadius: "8px",
     padding: "20px",
     boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
     display: "flex",
     flexDirection: "column",
+    minHeight: 0,
+    overflow: "hidden",
   },
   sectionTitle: {
     fontSize: "16px",
@@ -81,13 +119,17 @@ const styles = {
     margin: 0,
   },
   chartContainer: {
-    flex: 1,
-    minHeight: "200px",
+    height: "250px",
+    minHeight: "250px",
+    maxHeight: "250px",
     marginTop: "15px",
+    overflow: "hidden",
+    flexShrink: 0,
   },
   tableContainer: {
     flex: 1,
     overflow: "auto",
+    minHeight: "650px", // Достаточно для 20 строк без прокрутки
   },
   table: {
     width: "100%",
@@ -206,6 +248,11 @@ const styles = {
   },
   newScanRow: {
     animation: "highlightRow 2s ease-out",
+  },
+  robotsTable: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontSize: "10px",
   },
 };
 
@@ -372,7 +419,7 @@ export default function Dashboard() {
         // Браузерное уведомление (если разрешено)
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification('⚠️ Критический остаток!', {
-            body: `${alert.product_name} в зоне ${alert.zone}: ${alert.quantity} шт.`,
+            body: `${alert.product_name} в зоне ${alert.zone}-${alert.row}: ${alert.quantity} шт.`,
             icon: '/favicon.ico',
             requireInteraction: false,
           });
@@ -471,16 +518,58 @@ export default function Dashboard() {
       ))}
 
       <main style={styles.main}>
-        {/* Карта склада */}
+        {/* Верхний левый блок: Карта склада */}
         <section style={styles.mapSection}>
           <h3 style={styles.sectionTitle}>Карта склада</h3>
-          <WarehouseMap
-            robots={data?.robots || []}
-            recentScans={data?.recent_scans || []}
-          />
+          
+          <div style={styles.mapContainer}>
+            <div style={styles.mapWrapper}>
+              <WarehouseMap
+                robots={data?.robots || []}
+                recentScans={data?.recent_scans || []}
+              />
+            </div>
+          </div>
+
+          {/* Легенда снизу карты */}
+          <div style={styles.legendContainer}>
+            <div style={{ fontWeight: "bold", marginBottom: 6, fontSize: 10 }}>
+              Легенда:
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "4px", fontSize: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <div style={{ width: 12, height: 8, backgroundColor: "#d4edda", border: "1px solid #999", borderRadius: 2 }} />
+                <span>Проверена</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <div style={{ width: 12, height: 8, backgroundColor: "#fff3cd", border: "1px solid #999", borderRadius: 2 }} />
+                <span>Требует проверки</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <div style={{ width: 12, height: 8, backgroundColor: "#f8d7da", border: "1px solid #999", borderRadius: 2 }} />
+                <span>Критично</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <div style={{ width: 12, height: 8, backgroundColor: "#e9ecef", border: "1px solid #999", borderRadius: 2 }} />
+                <span>Нет данных</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <div style={{ width: 7, height: 7, backgroundColor: "#28a745", borderRadius: "50%", border: "1px solid #666" }} />
+                <span>Робот активен</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <div style={{ width: 7, height: 7, backgroundColor: "#ffc107", borderRadius: "50%", border: "1px solid #666" }} />
+                <span>Низкий заряд</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                <div style={{ width: 7, height: 7, backgroundColor: "#dc3545", borderRadius: "50%", border: "1px solid #666" }} />
+                <span>Робот offline</span>
+              </div>
+            </div>
+          </div>
         </section>
 
-        {/* Статистика */}
+        {/* Верхний правый блок: Статистика */}
         <section style={styles.statsSection}>
           <h3 style={styles.sectionTitle}>Статистика в реальном времени</h3>
           <div style={styles.statsGrid}>
@@ -514,7 +603,23 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* Последние сканирования */}
+        {/* Нижний левый блок: Предиктивная аналитика */}
+        <div style={{
+          gridColumn: "1",
+          gridRow: "3", // Третий ряд - под картой
+          backgroundColor: "white",
+          borderRadius: "8px",
+          padding: "20px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+          overflow: "hidden",
+        }}>
+          <InventoryPredict />
+        </div>
+
+        {/* Нижний правый блок: Последние сканирования */}
         <section style={styles.scansSection}>
           <h3 style={styles.sectionTitle}>Последние сканирования</h3>
           <div style={styles.tableContainer}>
@@ -535,6 +640,22 @@ export default function Dashboard() {
                   const scanId = `${scan.robot_id}-${scan.time}`;
                   const isNew = newScanIds.has(scanId);
 
+                  // Форматируем зону с дефисом: A-31
+                  const formatZone = () => {
+                    if (scan.zone) {
+                      // Если зона уже приходит в формате "A-31" или "A31"
+                      const zoneMatch = scan.zone.match(/^([A-Z]+)[-\s]?(\d+)$/);
+                      if (zoneMatch) {
+                        return `${zoneMatch[1]}-${zoneMatch[2]}`;
+                      }
+                      return scan.zone;
+                    }
+                    if (robot && robot.zone && robot.row) {
+                      return `${robot.zone}-${robot.row}`;
+                    }
+                    return "—";
+                  };
+
                   return (
                     <tr
                       key={`${scan.robot_id}-${scan.time}-${index}`}
@@ -545,7 +666,7 @@ export default function Dashboard() {
                       </td>
                       <td style={styles.tableCell}>{scan.robot_id}</td>
                       <td style={styles.tableCell}>
-                        {scan.zone || (robot ? `${robot.zone}${robot.row}` : "—")}
+                        {formatZone()}
                       </td>
                       <td style={styles.tableCell}>{scan.product}</td>
                       <td style={styles.tableCell}>{scan.quantity}</td>
@@ -575,9 +696,6 @@ export default function Dashboard() {
             )}
           </div>
         </section>
-
-        {/* Предиктивная аналитика */}
-        <InventoryPredict />
       </main>
     </div>
   );
