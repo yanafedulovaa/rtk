@@ -59,7 +59,6 @@ def serialize_item(item, source):
 
 
 class InventoryHistoryView(APIView):
-
     def get(self, request):
         from_date = request.GET.get('from')
         to_date = request.GET.get('to')
@@ -105,7 +104,7 @@ class InventoryHistoryView(APIView):
             )
         )
         for item in qs1_values:
-            item["product_name"] = item.pop("product__name")  # унификация
+            item["product_name"] = item.pop("product__name")
             item["source"] = "history"
 
         # --- Преобразуем InventoryCSVImport в словари ---
@@ -137,6 +136,50 @@ class InventoryHistoryView(APIView):
         # --- Объединяем обе таблицы ---
         combined = list(chain(qs1_values, qs2_values))
 
+        # ✅ ПОДСЧЕТ РАСХОЖДЕНИЙ
+        discrepancies_count = 0
+        products_cache = {}  # Кэш для избежания повторных запросов к БД
+
+        for item in combined:
+            product_id = item.get("product_id")
+            actual_qty = item.get("quantity", 0)
+
+            # Получаем данные о продукте (с кэшированием)
+            if product_id not in products_cache:
+                try:
+                    product = Product.objects.get(id=product_id)
+                    products_cache[product_id] = {
+                        'optimal_stock': product.optimal_stock,
+                        'min_stock': product.min_stock
+                    }
+                except Product.DoesNotExist:
+                    products_cache[product_id] = None
+
+            product_data = products_cache[product_id]
+
+            if product_data:
+                expected_qty = product_data['optimal_stock']
+                min_stock = product_data['min_stock']
+
+                # Вычисляем расхождение
+                discrepancy = actual_qty - expected_qty
+
+                # Считаем значимым расхождением отклонение > 10% от optimal_stock
+                # или если товар ниже min_stock при ожидаемом optimal_stock
+                threshold = max(expected_qty * 0.1, 5)  # минимум ±5 единиц
+
+                if abs(discrepancy) > threshold or actual_qty < min_stock:
+                    discrepancies_count += 1
+
+                # Добавляем данные в item
+                item["expected_quantity"] = expected_qty
+                item["discrepancy"] = discrepancy
+                item["min_stock"] = min_stock
+            else:
+                item["expected_quantity"] = None
+                item["discrepancy"] = None
+                item["min_stock"] = None
+
         # --- Фильтруем по статусу после объединения ---
         if status_filter and status_filter.lower() != "all":
             combined = [
@@ -146,7 +189,7 @@ class InventoryHistoryView(APIView):
         # --- Сортировка ---
         reverse = ordering.startswith("-")
         field = ordering.lstrip("-")
-        combined.sort(key=lambda x: x.get(field), reverse=reverse)
+        combined.sort(key=lambda x: x.get(field) if x.get(field) is not None else "", reverse=reverse)
 
         # --- Пагинация ---
         paginator = InventoryPagination()
@@ -157,8 +200,8 @@ class InventoryHistoryView(APIView):
             "items": page,
             "summary": {
                 "total_checks": len(combined),
-                "unique_products": len({item["product_name"] for item in combined}),
-                "discrepancies": 0,
+                "unique_products": len({item["product_name"] for item in combined if item["product_name"]}),
+                "discrepancies": discrepancies_count,  # ✅ Теперь считается реально
                 "avg_time_per_zone": round(len(combined) / 60, 2) if combined else 0
             },
             "pagination": {
@@ -172,7 +215,6 @@ class InventoryHistoryView(APIView):
         }
 
         return Response(response_data)
-
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -315,13 +357,8 @@ class InventoryExportMixin:
     """ Общая логика фильтрации для экспорта с поддержкой двух таблиц """
 
     def get_filtered_data(self, request):
-        """
-        Ожидаем либо:
-        - список выбранных записей: [{"id": 1, "source": "history"}, ...]
-        - или all=True + filters
-        """
+        # --- Существующий код ---
         if request.data.get("all"):
-            # Экспорт всех записей по фильтрам
             filters = request.data.get("filters", {})
             from_date = filters.get("from")
             to_date = filters.get("to")
@@ -329,7 +366,6 @@ class InventoryExportMixin:
             status_filter = filters.get("status")
             search = filters.get("search")
 
-            # Получаем все записи из обеих таблиц
             qs1 = InventoryHistory.objects.all()
             qs2 = InventoryCSVImport.objects.all()
 
@@ -351,7 +387,6 @@ class InventoryExportMixin:
                     Q(product_name__icontains=search) | Q(product_id__icontains=search)
                 )
 
-            # Сериализация
             data = []
             for item in qs1:
                 data.append({
@@ -384,7 +419,6 @@ class InventoryExportMixin:
                     "source": "csv",
                 })
         else:
-            # Обычный экспорт выбранных записей
             selected = request.data.get("selected", [])
             data = []
 
@@ -427,11 +461,50 @@ class InventoryExportMixin:
                         "source": "csv",
                     })
 
-        # Сортировка
+        # --- Сортировка ---
         ordering = request.data.get("ordering", "-scanned_at")
         reverse = ordering.startswith("-")
         field = ordering.lstrip("-")
         data.sort(key=lambda x: x.get(field), reverse=reverse)
+
+        # ✅ Расчёт расхождений
+        products_cache = {}
+        discrepancies_count = 0
+
+        for item in data:
+            product_id = item.get("product_id")
+            actual_qty = item.get("quantity", 0)
+
+            if product_id not in products_cache:
+                try:
+                    product = Product.objects.get(id=product_id)
+                    products_cache[product_id] = {
+                        'optimal_stock': product.optimal_stock,
+                        'min_stock': product.min_stock
+                    }
+                except Product.DoesNotExist:
+                    products_cache[product_id] = None
+
+            product_data = products_cache[product_id]
+
+            if product_data:
+                expected_qty = product_data['optimal_stock']
+                discrepancy = actual_qty - expected_qty
+                threshold = max(expected_qty * 0.1, 5)
+
+                if abs(discrepancy) > threshold or actual_qty < product_data['min_stock']:
+                    discrepancies_count += 1
+
+                item["expected_quantity"] = expected_qty
+                item["discrepancy"] = discrepancy
+                item["min_stock"] = product_data["min_stock"]
+            else:
+                item["expected_quantity"] = None
+                item["discrepancy"] = None
+                item["min_stock"] = None
+
+        # Можно вернуть также количество расхождений при необходимости:
+        # return {"data": data, "discrepancies": discrepancies_count}
 
         return data
 
@@ -446,7 +519,18 @@ class InventoryExportExcelView(InventoryExportMixin, APIView):
         ws = wb.active
         ws.title = "Inventory Export"
 
-        headers = ["ID товара", "Дата", "Зона", "Товар", "Кол-во", "Статус", "Источник"]
+        headers = [
+            "ID товара",
+            "Дата",
+            "Зона",
+            "Товар",
+            "Кол-во (факт)",
+            "Ожидаемое количество",
+            "Расхождение (+/-)",
+            "Минимальный запас",
+            "Статус",
+            "Источник"
+        ]
         ws.append(headers)
 
         for item in data:
@@ -456,6 +540,9 @@ class InventoryExportExcelView(InventoryExportMixin, APIView):
                 item["zone"],
                 item["product_name"],
                 item["quantity"],
+                item.get("expected_quantity", ""),
+                item.get("discrepancy", ""),
+                item.get("min_stock", ""),
                 item["status"],
                 item["source"]
             ])
@@ -494,13 +581,24 @@ class InventoryExportPDFView(InventoryExportMixin, APIView):
 
         # Колонки
         p.setFont("DejaVuSans", 10)
-        headers = ["ID товара", "Дата", "Зона", "Товар", "Кол-во", "Статус", "Источник"]
+        headers = [
+            "ID товара",
+            "Дата",
+            "Зона",
+            "Товар",
+            "Кол-во (факт)",
+            "Ожид.",
+            "Δ (+/-)",
+            "Мин.запас",
+            "Статус",
+            "Источник"
+        ]
         p.drawString(50, y, " | ".join(headers))
         y -= 20
 
         for item in data:
             scanned_at = item["scanned_at"].strftime("%Y-%m-%d %H:%M:%S") if item["scanned_at"] else ""
-            line = f"{item['product_id']} | {scanned_at} | {item['zone']} | {item['product_name']} | {item['quantity']} | {item['status']} | {item['source']}"
+            line = f"{item['product_id']} | {scanned_at} | {item['zone']} | {item['product_name']} | {item['quantity']} | {item.get('expected_quantity', '')} | {item.get('discrepancy', ''):+} | {item.get('min_stock', '')} | {item['status']} | {item['source']}"
             p.drawString(50, y, line)
             y -= 15
 
@@ -516,6 +614,7 @@ class InventoryExportPDFView(InventoryExportMixin, APIView):
         response = HttpResponse(pdf, content_type="application/pdf")
         response["Content-Disposition"] = 'attachment; filename="inventory_export.pdf"'
         return response
+
 
 class InventoryUploadView(APIView):
     def post(self, request):
@@ -541,8 +640,9 @@ class InventoryUploadView(APIView):
 
         created_count = 0
         errors = []
+        warnings = []  # ✅ Добавляем предупреждения
 
-        for row in reader:
+        for row_num, row in enumerate(reader, start=2):  # start=2 т.к. первая строка - заголовки
             try:
                 # Извлекаем данные
                 product_id = row["product_id"].strip()
@@ -552,13 +652,47 @@ class InventoryUploadView(APIView):
                 row_number = int(row["row"]) if row["row"] else None
                 shelf_number = int(row["shelf"]) if row["shelf"] else None
 
+                # ✅ ПРОВЕРЯЕМ СУЩЕСТВОВАНИЕ ПРОДУКТА
+                try:
+                    product = Product.objects.get(id=product_id)
+
+                    # Можно добавить предупреждение если есть большое расхождение
+                    expected = product.optimal_stock
+                    discrepancy = quantity - expected
+                    threshold = max(expected * 0.1, 5)
+
+                    if abs(discrepancy) > threshold:
+                        warnings.append({
+                            "row": row_num,
+                            "product_id": product_id,
+                            "product_name": product_name,
+                            "message": f"Большое расхождение: ожидалось {expected}, фактически {quantity} (разница: {discrepancy:+d})"
+                        })
+
+                except Product.DoesNotExist:
+                    # Если продукта нет в базе - создаем его автоматически или выдаем ошибку
+                    warnings.append({
+                        "row": row_num,
+                        "product_id": product_id,
+                        "message": f"Продукт '{product_name}' не найден в базе данных. Будет создан с дефолтными значениями."
+                    })
+
+                    # ✅ СОЗДАЕМ ПРОДУКТ С ДЕФОЛТНЫМИ ЗНАЧЕНИЯМИ
+                    Product.objects.create(
+                        id=product_id,
+                        name=product_name,
+                        category="Без категории",
+                        min_stock=10,
+                        optimal_stock=quantity  # Используем текущее количество как оптимальное
+                    )
+
                 # Парсим дату и делаем её timezone-aware
                 scanned_date = parse_date(row["date"])
                 if scanned_date:
                     scanned_at = datetime.combine(scanned_date, datetime.min.time())
                     scanned_at = timezone.make_aware(scanned_at)
                 else:
-                    scanned_at = None
+                    scanned_at = timezone.now()  # Если дата не указана, используем текущую
 
                 # Создаём запись в таблице InventoryCSVImport
                 InventoryCSVImport.objects.create(
@@ -569,20 +703,39 @@ class InventoryUploadView(APIView):
                     scanned_at=scanned_at,
                     row_number=row_number,
                     shelf_number=shelf_number,
-                    status='OK'  # можно менять, если нужно вычислять статус
+                    status='OK'
                 )
 
                 created_count += 1
 
+            except ValueError as e:
+                errors.append({
+                    "row": row_num,
+                    "data": row,
+                    "error": f"Ошибка преобразования данных: {str(e)}"
+                })
+                continue
             except Exception as e:
-                errors.append({"row": row, "error": str(e)})
+                errors.append({
+                    "row": row_num,
+                    "data": row,
+                    "error": str(e)
+                })
                 continue
 
         # Формируем ответ
         response = {
             "message": f"Успешно загружено {created_count} записей",
+            "created_count": created_count,
         }
-        if errors:
-            response["errors"] = errors[:5]  # показываем первые 5 ошибок для отладки
 
-        return Response(response, status=status.HTTP_200_OK)
+        if warnings:
+            response["warnings"] = warnings[:10]  # Первые 10 предупреждений
+            response["total_warnings"] = len(warnings)
+
+        if errors:
+            response["errors"] = errors[:5]  # Первые 5 ошибок
+            response["total_errors"] = len(errors)
+
+        status_code = status.HTTP_200_OK if created_count > 0 else status.HTTP_400_BAD_REQUEST
+        return Response(response, status=status_code)

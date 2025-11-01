@@ -9,7 +9,7 @@ export default function InventoryHistoryPage() {
   const [summary, setSummary] = useState({});
   const [pagination, setPagination] = useState({});
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(10);
   const [filters, setFilters] = useState({
     from: "",
     to: "",
@@ -26,13 +26,12 @@ export default function InventoryHistoryPage() {
 
   // Функция для получения токена
   const getAuthToken = () => {
-    // Проверяем разные возможные ключи в localStorage
     return localStorage.getItem('access')
   };
 
-  useEffect(() => {
-    fetchData();
-  }, [page, filters, sort]);
+    useEffect(() => {
+      fetchData();
+    }, [page, filters, sort, pageSize]);
 
   const fetchData = async () => {
     try {
@@ -255,19 +254,37 @@ export default function InventoryHistoryPage() {
                     title="Выбрать все записи на странице"
                   />
                 </th>
-                <th onClick={() => handleSort("product_id")} style={{ cursor: "pointer" }}>ID {getSortSymbol("product_id")}</th>
-                <th onClick={() => handleSort("scanned_at")} style={{ cursor: "pointer" }}>Дата {getSortSymbol("scanned_at")}</th>
-                <th onClick={() => handleSort("zone")} style={{ cursor: "pointer" }}>Зона {getSortSymbol("zone")}</th>
-                <th onClick={() => handleSort("product_name")} style={{ cursor: "pointer" }}>Товар {getSortSymbol("product_name")}</th>
-                <th onClick={() => handleSort("quantity")} style={{ cursor: "pointer" }}>Кол-во {getSortSymbol("quantity")}</th>
-                <th onClick={() => handleSort("status")} style={{ cursor: "pointer" }}>Статус {getSortSymbol("status")}</th>
+                <th onClick={() => handleSort("product_id")} style={{ cursor: "pointer" }}>
+                  ID {getSortSymbol("product_id")}
+                </th>
+                <th onClick={() => handleSort("scanned_at")} style={{ cursor: "pointer" }}>
+                  Дата {getSortSymbol("scanned_at")}
+                </th>
+                <th onClick={() => handleSort("zone")} style={{ cursor: "pointer" }}>
+                  Зона {getSortSymbol("zone")}
+                </th>
+                <th onClick={() => handleSort("product_name")} style={{ cursor: "pointer" }}>
+                  Товар {getSortSymbol("product_name")}
+                </th>
+                <th onClick={() => handleSort("expected_quantity")} style={{ cursor: "pointer" }}>
+                  Ожидаемое {getSortSymbol("expected_quantity")}
+                </th>
+                <th onClick={() => handleSort("quantity")} style={{ cursor: "pointer" }}>
+                  Фактическое {getSortSymbol("quantity")}
+                </th>
+                <th onClick={() => handleSort("discrepancy")} style={{ cursor: "pointer" }}>
+                  Расхождение {getSortSymbol("discrepancy")}
+                </th>
+                <th onClick={() => handleSort("status")} style={{ cursor: "pointer" }}>
+                  Статус {getSortSymbol("status")}
+                </th>
                 <th>Источник</th>
               </tr>
             </thead>
             <tbody>
               {items.length ? (
                 items.map((item) => (
-                  <tr key={item.uniqueId}>
+                  <tr key={`${item.source}_${item.id}`}>
                     <td>
                       <input
                         type="checkbox"
@@ -280,14 +297,25 @@ export default function InventoryHistoryPage() {
                     <td>{new Date(item.scanned_at).toLocaleString()}</td>
                     <td>{item.zone}</td>
                     <td>{item.product_name}</td>
-                    <td>{item.quantity}</td>
-                    <td>{item.status}</td>
-                    <td>{item.source}</td>
+                    <td>{item.expected_quantity ?? '-'}</td>
+                    <td>{item.quantity ?? '-'}</td>
+                    <td>
+                      {item.discrepancy !== null && item.discrepancy !== undefined
+                        ? `${item.discrepancy > 0 ? '+' : ''}${item.discrepancy}`
+                        : '-'
+                      }
+                    </td>
+                    <td>
+                        {item.status}
+                    </td>
+                    <td>
+                        {item.source}
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="8" className="text-center">Нет данных</td>
+                  <td colSpan="10" className="text-center">Нет данных</td>
                 </tr>
               )}
             </tbody>
@@ -304,7 +332,24 @@ export default function InventoryHistoryPage() {
               Сбросить выбор
             </button>
           </div>
-
+              <div>
+            <label className="me-2">Записей на странице:</label>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1); // сбрасываем на первую страницу при изменении лимита
+              }}
+              className="form-select d-inline-block"
+              style={{ width: "auto" }}
+            >
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+          </div>
           <p className="mb-0">
             Выбрано: <strong>{selectAll ? summary.total_checks : selected.length}</strong>
           </p>
@@ -357,10 +402,25 @@ export default function InventoryHistoryPage() {
         <div className="card mt-4">
           <div className="card-header">Сводка</div>
           <div className="card-body">
-            <p>Всего проверок: <strong>{summary.total_checks}</strong></p>
-            <p>Уникальных товаров: <strong>{summary.unique_products}</strong></p>
-            <p>Несоответствий: <strong>{summary.discrepancies}</strong></p>
-            <p>Среднее время на зону: <strong>{summary.avg_time_per_zone}</strong></p>
+            <div className="row">
+              <div className="col-md-3">
+                <p className="mb-2">Всего проверок: <strong>{summary.total_checks}</strong></p>
+              </div>
+              <div className="col-md-3">
+                <p className="mb-2">Уникальных товаров: <strong>{summary.unique_products}</strong></p>
+              </div>
+              <div className="col-md-3">
+                <p className="mb-2">
+                  Несоответствий:
+                  <strong className={summary.discrepancies > 0 ? "text-danger ms-1" : "ms-1"}>
+                    {summary.discrepancies}
+                  </strong>
+                </p>
+              </div>
+              <div className="col-md-3">
+                <p className="mb-2">Среднее время на зону: <strong>{summary.avg_time_per_zone} мин</strong></p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
