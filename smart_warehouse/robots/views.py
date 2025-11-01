@@ -125,6 +125,7 @@ class RobotScanView(APIView):
                             'time': last_update.isoformat(),
                             'robot_id': robot.id,
                             'zone': robot.current_zone,
+                            'row': robot.current_row,  # ДОБАВИТЬ
                             'product': product.name,
                             'product_id': product_id,
                             'quantity': quantity,

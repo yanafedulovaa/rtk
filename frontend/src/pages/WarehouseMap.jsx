@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import api from "../api";
 
 export default function WarehouseMap({ robots = [], recentScans = [] }) {
   const containerRef = useRef(null);
@@ -8,6 +9,7 @@ export default function WarehouseMap({ robots = [], recentScans = [] }) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [hoveredRobot, setHoveredRobot] = useState(null);
   const [hoveredCell, setHoveredCell] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const cellWidth = 40;
   const cellHeight = 28;
@@ -16,58 +18,97 @@ export default function WarehouseMap({ robots = [], recentScans = [] }) {
   const marginLeft = 40;
   const marginTop = 36;
 
-  // Обновление зон при получении новых данных через props
+  // Загрузка статуса зон из API при монтировании компонента
   useEffect(() => {
-    const newZoneData = {};
+    const fetchZoneStatus = async () => {
+      try {
+        setLoading(true);
+        // Получаем токен из localStorage
+        const token = localStorage.getItem('access');
+        const config = token ? {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        } : {};
 
-    // Обрабатываем последние сканирования
+        const response = await api.get('/dashboard/zone-status/', config);
+        const apiZoneData = response.data;
+
+        // Преобразуем данные из API в нужный формат
+        const formattedData = {};
+        zones.forEach(zone => {
+          for (let r = 1; r <= rows; r++) {
+            const key = `${zone}${r}`;
+            formattedData[key] = apiZoneData[key] || null;
+          }
+        });
+
+        setZoneStatus(formattedData);
+      } catch (error) {
+        console.error('Ошибка загрузки статуса зон:', error);
+        // В случае ошибки просто инициализируем пустыми данными
+        const emptyData = {};
+        zones.forEach(zone => {
+          for (let r = 1; r <= rows; r++) {
+            emptyData[`${zone}${r}`] = null;
+          }
+        });
+        setZoneStatus(emptyData);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchZoneStatus();
+  }, []); // Загружаем только при монтировании
+
+  // Обновление зон при получении новых данных через props (WebSocket)
+  useEffect(() => {
+    if (loading) return; // Не обновляем, пока загружаются начальные данные
+
+    const newZoneData = { ...zoneStatus }; // Сохраняем существующие данные
+
+    // Обрабатываем последние сканирования из WebSocket
     recentScans.forEach(scan => {
-      // Находим робота для этого скана
-      const robot = robots.find(r => r.id === scan.robot_id);
-      if (!robot || !robot.zone || robot.row == null) return;
+      // ИСПРАВЛЕНИЕ: используем zone и row напрямую из сканирования
+      const zone = scan.zone;
+      const row = scan.row || scan.row_number; // поддержка обоих форматов
 
-      const key = `${robot.zone}${robot.row}`;
+      if (!zone || row == null) return; // проверяем наличие данных
+
+      const key = `${zone}${row}`;
       const prev = newZoneData[key];
 
       const prevTime = prev?.time ? new Date(prev.time) : null;
       const thisTime = scan.time ? new Date(scan.time) : null;
 
-      // Сохраняем самый свежий скан для каждой ячейки
+      // Обновляем только если новое сканирование свежее
       if (!prev || (thisTime && (!prevTime || thisTime > prevTime))) {
         newZoneData[key] = {
           ...scan,
-          zone: robot.zone,
-          row: robot.row,
+          zone: zone,
+          row: row,
         };
       }
     });
 
-    // Добавляем пустые ячейки для всех остальных
-    zones.forEach(zone => {
-      for (let r = 1; r <= rows; r++) {
-        const key = `${zone}${r}`;
-        if (!newZoneData.hasOwnProperty(key)) {
-          newZoneData[key] = null;
-        }
-      }
-    });
-
+    // Обновляем состояние только если есть изменения
     setZoneStatus(newZoneData);
-  }, [robots, recentScans]);
+  }, [robots, recentScans, loading, zoneStatus]); // Добавлен zoneStatus в зависимости
 
   // --- Цвет ячейки ---
   const getZoneColor = (cell) => {
     if (!cell) return "#e9ecef"; // нет данных — серый
 
-    const statusRaw = (cell.status || "").toString().trim().toLowerCase();
+    const statusRaw = (cell.status || "").toString().trim().toUpperCase(); // Используем uppercase для проверки
     const scannedAt = cell.time ? new Date(cell.time) : null;
     const now = new Date();
 
     // Критический статус
-    if (statusRaw.includes("crit")) return "#f8d7da";
+    if (statusRaw.includes("CRITICAL") || statusRaw.includes("CRIT")) return "#f8d7da";
 
     // Низкий остаток
-    if (statusRaw.includes("low")) return "#fff3cd";
+    if (statusRaw.includes("LOW_STOCK") || statusRaw.includes("LOW")) return "#fff3cd";
 
     // Если нет времени сканирования
     if (!scannedAt) return "#fff3cd";
@@ -107,6 +148,21 @@ export default function WarehouseMap({ robots = [], recentScans = [] }) {
   return (
     <div style={{ padding: 12, position: "relative" }}>
       <h2 style={{ fontSize: 18, marginBottom: 12 }}>Интерактивная карта склада</h2>
+      {loading && (
+        <div style={{
+          position: "absolute",
+          top: 50,
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 1000,
+          background: "#fff",
+          padding: "8px 16px",
+          borderRadius: 4,
+          border: "1px solid #ddd"
+        }}>
+          Загрузка карты...
+        </div>
+      )}
       <div style={{ marginBottom: 10 }}>
         <button onClick={handleZoomIn} style={buttonStyle}>+</button>
         <button onClick={handleZoomOut} style={buttonStyle}>−</button>
@@ -116,6 +172,7 @@ export default function WarehouseMap({ robots = [], recentScans = [] }) {
         </span>
       </div>
 
+      {/* Остальной код остается без изменений */}
       <div
         ref={containerRef}
         style={{
@@ -352,7 +409,7 @@ export default function WarehouseMap({ robots = [], recentScans = [] }) {
   );
 }
 
-// === Стили ===
+// === Стили (остаются без изменений) ===
 const buttonStyle = {
   padding: "6px 10px",
   marginRight: 8,

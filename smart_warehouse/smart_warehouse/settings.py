@@ -49,8 +49,6 @@ INSTALLED_APPS = [
     'inventory',
     'django_rest_passwordreset',
     'channels',
-    'silk',
-    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -62,14 +60,8 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     "corsheaders.middleware.CorsMiddleware",
-    'silk.middleware.SilkyMiddleware',
 ]
 
-# Опционально: ограничьте сбор данных
-SILKY_PYTHON_PROFILER = True
-SILKY_MAX_REQUEST_BODY_SIZE = 1024  # 1KB
-SILKY_MAX_RESPONSE_BODY_SIZE = 1024
-SILKY_INTERCEPT_PERCENT = 100  # 100% запросов в dev, 10% в prod
 
 
 INTERNAL_IPS = [
@@ -105,8 +97,7 @@ DATABASES = {
         'NAME': 'smartwarehouse',
         'USER': 'postgres',
         'PASSWORD': 'admin',
-        # 'HOST': 'db', # (докер)
-        'HOST': 'localhost',
+        'HOST': 'db',
         'PORT': '5432',
     }
 }
@@ -201,7 +192,6 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ),
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 CORS_ALLOWED_ORIGINS = [
@@ -231,7 +221,9 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)], #если с докером то 'redis'
+            "hosts": [("redis", 6379)], #если с докером то 'redis'
+            "capacity": 1000,
         },
+
     },
 }

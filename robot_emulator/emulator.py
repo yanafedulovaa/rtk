@@ -20,11 +20,13 @@ class RobotEmulator:
         self.robot_id = robot_id
         self.api_url = api_url
         self.battery = random.randint(80, 100)
-        self.current_zone = chr(ord('A') + random.randint(0, 4))  # A-E
-        self.current_row = random.randint(1, 20)
+        # Исправлено: A-Z (26 зон) и 1-50 (50 рядов)
+        self.current_zone = chr(ord('A') + random.randint(0, 25))  # A-Z
+        self.current_row = random.randint(1, 50)  # 1-50
         self.current_shelf = random.randint(1, 10)
         self.scan_count = 0
         self.error_count = 0
+        self.last_scan_time = time.time()
 
         # Список тестовых товаров
         self.products = [
@@ -39,8 +41,10 @@ class RobotEmulator:
         ]
 
     def generate_scan_data(self):
-        """Генерация данных сканирования"""
-        scanned_products = random.sample(self.products, k=random.randint(1, 2))
+        """Генерация данных сканирования - исправлено: сканируем 1 товар за раз"""
+        # Чаще сканируем 1 товар, реже 2 (70% шанс 1 товар, 30% шанс 2)
+        num_products = 1 if random.random() < 0.7 else 2
+        scanned_products = random.sample(self.products, k=min(num_products, len(self.products)))
         scan_results = []
 
         for product in scanned_products:
@@ -51,7 +55,7 @@ class RobotEmulator:
                 status = "CRITICAL"
             elif rand < 0.25:  # 15% шанс низкого
                 quantity = random.randint(6, 15)
-                status = "LOW"
+                status = "LOW_STOCK"  # Исправлено: было "LOW"
             else:  # 75% шанс нормального
                 quantity = random.randint(16, 100)
                 status = "OK"
@@ -67,19 +71,23 @@ class RobotEmulator:
 
     def move_to_next_location(self):
         """Перемещение робота к следующей локации"""
-        self.current_shelf += 1
-        if self.current_shelf > 10:
-            self.current_shelf = 1
-            self.current_row += 1
-            if self.current_row > 20:
-                self.current_row = 1
-                # Переход к следующей зоне
-                self.current_zone = chr(ord(self.current_zone) + 1)
-                if ord(self.current_zone) > ord('E'):
-                    self.current_zone = 'A'
+        # Случайно решаем, двигаться ли дальше или остаться на месте
+        if random.random() < 0.8:  # 80% шанс двигаться
+            self.current_shelf += 1
+            if self.current_shelf > 10:
+                self.current_shelf = 1
+                # Иногда переходим к следующему ряду
+                if random.random() < 0.6:  # 60% шанс перейти к следующему ряду
+                    self.current_row += 1
+                    if self.current_row > 50:  # Исправлено: было > 20
+                        self.current_row = 1
+                        # Переход к следующей зоне
+                        self.current_zone = chr(ord(self.current_zone) + 1)
+                        if ord(self.current_zone) > ord('Z'):  # Исправлено: было > ord('E')
+                            self.current_zone = 'A'
 
-        # Расход батареи
-        self.battery -= random.uniform(0.2, 1.0)
+        # Расход батареи (медленнее)
+        self.battery -= random.uniform(0.1, 0.5)  # Исправлено: было 0.2-1.0
         if self.battery < 20:
             self.log("🔌 Низкий заряд! Возвращаюсь на зарядку...", "warning")
             time.sleep(2)
@@ -106,6 +114,17 @@ class RobotEmulator:
 
     def send_data(self):
         """Отправка данных на сервер"""
+        # Не всегда сканируем - иногда просто перемещаемся
+        should_scan = random.random() < 0.8  # 80% шанс что сканируем
+
+        if not should_scan:
+            self.log(
+                f"🚶 Перемещение | Позиция: {self.current_zone}{self.current_row}-{self.current_shelf} | "
+                f"🔋 {round(self.battery)}%",
+                "info"
+            )
+            return
+
         scan_results = self.generate_scan_data()
 
         data = {
@@ -141,9 +160,11 @@ class RobotEmulator:
                             "critical"
                         )
                 else:
+                    products_info = ", ".join([p['product_name'] for p in scan_results])
                     self.log(
                         f"📦 Сканирование #{self.scan_count} | "
                         f"Позиция: {self.current_zone}{self.current_row}-{self.current_shelf} | "
+                        f"Товары: {products_info} | "
                         f"🔋 {round(self.battery)}%",
                         "success"
                     )
@@ -162,7 +183,12 @@ class RobotEmulator:
         while True:
             self.send_data()
             self.move_to_next_location()
-            time.sleep(int(os.getenv('UPDATE_INTERVAL', 5)))  # По умолчанию 5 секунд
+
+            # Увеличенный интервал с небольшими случайными вариациями для реалистичности
+            base_interval = int(os.getenv('UPDATE_INTERVAL', 15))  # По умолчанию 15 секунд (было 5)
+            # Добавляем случайную вариацию ±3 секунды
+            interval = base_interval + random.randint(-3, 3)
+            time.sleep(max(5, interval))  # Минимум 5 секунд
 
 
 def print_banner():
@@ -184,22 +210,26 @@ def print_stats(robots):
         print("📊 СТАТИСТИКА РАБОТЫ РОБОТОВ:")
         total_scans = sum(r.scan_count for r in robots)
         total_errors = sum(r.error_count for r in robots)
+        avg_battery = sum(r.battery for r in robots) / len(robots) if robots else 0
         print(f"  ✅ Всего сканирований: {total_scans}")
         print(f"  ❌ Всего ошибок: {total_errors}")
         print(f"  🤖 Активных роботов: {len(robots)}")
+        print(f"  🔋 Средний заряд батареи: {round(avg_battery, 1)}%")
         print("=" * 60 + "\n")
 
 
 if __name__ == "__main__":
     print_banner()
 
-    api_url = os.getenv('API_URL', 'http://127.0.0.1:8000')
+    api_url = os.getenv('API_URL', 'http://backend:8000')
     robots_count = int(os.getenv('ROBOTS_COUNT', 5))  # По умолчанию 5 роботов
-    update_interval = int(os.getenv('UPDATE_INTERVAL', 5))  # Обновление каждые 5 секунд
+    update_interval = int(os.getenv('UPDATE_INTERVAL', 15))  # Обновление каждые 15 секунд (было 5)
 
     print(f"🌐 API URL: {api_url}")
     print(f"🤖 Количество роботов: {robots_count}")
-    print(f"⏱️  Интервал обновления: {update_interval} сек")
+    print(f"⏱️  Интервал обновления: {update_interval} сек (с вариациями ±3 сек)")
+    print(f"📦 Зоны склада: A-Z (26 зон)")
+    print(f"📊 Ряды склада: 1-50 (50 рядов)")
     print(f"⌨️  Нажмите Ctrl+C для остановки\n")
     print("=" * 60 + "\n")
 

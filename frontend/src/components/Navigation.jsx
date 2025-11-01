@@ -1,9 +1,7 @@
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import CsvUploadModal from './CsvUploadModal';
 import { useState } from 'react';
-
-
 
 const styles = {
   nav: {
@@ -35,7 +33,10 @@ const styles = {
   },
   navLink: {
     textDecoration: 'none',
-    color: 'inherit'
+    color: 'inherit',
+    display: 'block',
+    width: '100%',
+    height: '100%'
   },
   csvButton: {
     backgroundColor: '#28a745',
@@ -49,7 +50,6 @@ const styles = {
 };
 
 export default function Navigation() {
-  const navigate = useNavigate();
   const location = useLocation();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -59,7 +59,7 @@ export default function Navigation() {
   ];
 
   const handleCSVUpload = () => {
-  setIsModalOpen(true); // открываем модальное окно
+    setIsModalOpen(true);
   };
 
   return (
@@ -73,9 +73,19 @@ export default function Navigation() {
                 ...styles.navItem,
                 ...(location.pathname === tab.path && styles.navItemActive)
               }}
-              onClick={() => navigate(tab.path)}
             >
-              {tab.label}
+              <Link
+                to={tab.path}
+                style={styles.navLink}
+                onClick={(e) => {
+                  // Убеждаемся, что навигация происходит
+                  e.preventDefault();
+                  // Используем navigate для программной навигации
+                  window.location.href = tab.path;
+                }}
+              >
+                {tab.label}
+              </Link>
             </li>
           ))}
         </ul>

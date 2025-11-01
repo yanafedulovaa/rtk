@@ -87,6 +87,7 @@ class DashboardConsumer(AsyncWebsocketConsumer):
                     'time': s.scanned_at.isoformat(),
                     'robot_id': s.robot_id,
                     'zone': s.zone,
+                    'row': s.row_number,  # ДОБАВИТЬ ЭТУ СТРОКУ
                     'product': s.product.name,
                     'quantity': s.quantity,
                     'status': s.status,
