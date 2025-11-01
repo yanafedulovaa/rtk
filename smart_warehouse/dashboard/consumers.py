@@ -4,6 +4,8 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from robots.models import Robot
 from warehouse.models import InventoryHistory
+from django.utils import timezone
+from datetime import datetime, time
 
 
 class DashboardConsumer(AsyncWebsocketConsumer):
@@ -70,6 +72,14 @@ class DashboardConsumer(AsyncWebsocketConsumer):
         robots = Robot.objects.all()
         recent_scans = InventoryHistory.objects.order_by('-scanned_at')[:20]
 
+        # Получаем начало сегодняшнего дня
+        today_start = timezone.make_aware(
+            datetime.combine(timezone.now().date(), time.min)
+        )
+
+        # Сканирования за сегодня для статистики
+        today_scans = InventoryHistory.objects.filter(scanned_at__gte=today_start)
+
         return {
             'robots': [
                 {
@@ -87,12 +97,19 @@ class DashboardConsumer(AsyncWebsocketConsumer):
                     'time': s.scanned_at.isoformat(),
                     'robot_id': s.robot_id,
                     'zone': s.zone,
-                    'row': s.row_number,  # ДОБАВИТЬ ЭТУ СТРОКУ
+                    'row': s.row_number,
                     'product': s.product.name,
                     'quantity': s.quantity,
                     'status': s.status,
                 } for s in recent_scans
-            ]
+            ],
+            'statistics': {
+                'active_robots': robots.filter(is_active=True).count(),
+                'total_robots': robots.count(),
+                'checked_today': today_scans.count(),  # ✅ Только сегодня
+                'critical_stock': today_scans.filter(status="CRITICAL").count(),  # ✅ Только сегодня
+                'avg_battery': round(sum(r.battery_level for r in robots) / robots.count()) if robots.count() > 0 else 0
+            }
         }
 
     @staticmethod

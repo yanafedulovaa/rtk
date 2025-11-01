@@ -1,4 +1,7 @@
+from datetime import datetime, time
+
 from django.shortcuts import render
+from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.db.models import Max, OuterRef, Subquery
@@ -19,11 +22,15 @@ class DashboardCurrentView(APIView):
         robots = Robot.objects.all()
         recent_scans = InventoryHistory.objects.order_by('-scanned_at')[:20]
 
+        today_start = timezone.make_aware(
+            datetime.combine(timezone.now().date(), time.min)
+        )
+        today_scans = InventoryHistory.objects.filter(scanned_at__gte=today_start)
         stats = {
-            'active_robots': robots.count(),
-            'checked_today': InventoryHistory.objects.count(),
-            'critical_stock': InventoryHistory.objects.filter(status="CRITICAL").count(),
-            'avg_battery': round(sum(r.battery_level for r in robots) / (robots.count()))
+            'active_robots': robots.filter(is_active=True).count(),
+            'checked_today': today_scans.count(),
+            'critical_stock': today_scans.filter(status="CRITICAL").count(),
+            'avg_battery': round(sum(r.battery_level for r in robots) / robots.count()) if robots.count() > 0 else 0
         }
 
         return Response({

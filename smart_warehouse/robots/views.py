@@ -1,6 +1,7 @@
 # robots/views.py
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timezone as dt_timezone, time
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -51,15 +52,13 @@ class RobotScanView(APIView):
         if not robot_id or not location or not timestamp:
             return Response({"error": "Invalid data"}, status=status.HTTP_400_BAD_REQUEST)
 
-
         try:
             last_update = datetime.fromisoformat(timestamp.replace("Z", "")).replace(tzinfo=dt_timezone.utc)
         except ValueError:
             return Response({"error": "Invalid timestamp format"}, status=status.HTTP_400_BAD_REQUEST)
 
-
         robot, created = Robot.objects.update_or_create(
-            id=robot_id,  # id - это primary key в вашей модели
+            id=robot_id,
             defaults={
                 "battery_level": battery,
                 "last_update": last_update,
@@ -70,7 +69,6 @@ class RobotScanView(APIView):
                 "status": "active" if battery > 20 else "low_battery",
             }
         )
-
 
         channel_layer = get_channel_layer()
         if channel_layer:
@@ -89,6 +87,12 @@ class RobotScanView(APIView):
                     }
                 }
             )
+
+        # ✅ ДОБАВЛЯЕМ: Получаем актуальную статистику один раз перед циклом
+        today_start = timezone.make_aware(
+            datetime.combine(timezone.now().date(), time.min)
+        )
+        today_scans = InventoryHistory.objects.filter(scanned_at__gte=today_start)
 
         for scan in scans:
             product_id = scan.get("product_id")
@@ -115,6 +119,11 @@ class RobotScanView(APIView):
                 scanned_at=last_update
             )
 
+            # ✅ ОБНОВЛЯЕМ: Пересчитываем статистику после создания записи
+            today_scans_count = today_scans.count() + 1  # +1 за только что созданную запись
+            critical_count = today_scans.filter(status="CRITICAL").count()
+            if status_text == "CRITICAL":
+                critical_count += 1  # +1 если текущая запись критическая
 
             if channel_layer:
                 async_to_sync(channel_layer.group_send)(
@@ -125,11 +134,16 @@ class RobotScanView(APIView):
                             'time': last_update.isoformat(),
                             'robot_id': robot.id,
                             'zone': robot.current_zone,
-                            'row': robot.current_row,  # ДОБАВИТЬ
+                            'row': robot.current_row,
                             'product': product.name,
                             'product_id': product_id,
                             'quantity': quantity,
                             'status': status_text,
+                            # ✅ ДОБАВЛЯЕМ: Актуальную статистику
+                            'statistics': {
+                                'checked_today': today_scans_count,
+                                'critical_stock': critical_count,
+                            }
                         }
                     }
                 )
