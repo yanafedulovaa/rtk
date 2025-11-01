@@ -97,7 +97,7 @@ DATABASES = {
         'NAME': 'smartwarehouse',
         'USER': 'postgres',
         'PASSWORD': 'admin',
-        'HOST': 'localhost',
+        'HOST': 'db',
         'PORT': '5432',
     }
 }
@@ -221,7 +221,7 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("localhost", 6379)], #если с докером то 'redis'
+            "hosts": [("redis", 6379)], #если с докером то 'redis'
             "capacity": 1000,
         },
 
