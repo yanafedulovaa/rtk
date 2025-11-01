@@ -22,7 +22,9 @@ import numpy as np
 from products.models import Product
 from .models import InventoryCSVImport
 
-from datetime import datetime
+from datetime import datetime, timedelta
+
+
 class InventoryPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
@@ -67,9 +69,11 @@ class InventoryHistoryView(APIView):
         search = request.GET.get('search')
         ordering = request.GET.get('ordering') or '-scanned_at'
 
-        # --- Получаем QuerySet для обеих таблиц ---
-        qs1 = InventoryHistory.objects.all()
-        qs2 = InventoryCSVImport.objects.all()
+        now = timezone.now()
+        last_24_hours = now - timedelta(hours=24)
+
+        qs1 = InventoryHistory.objects.filter(scanned_at__gte=last_24_hours)
+        qs2 = InventoryCSVImport.objects.filter(scanned_at__gte=last_24_hours)
 
         # --- Фильтры по дате и зоне ---
         if from_date:
@@ -136,7 +140,6 @@ class InventoryHistoryView(APIView):
         # --- Объединяем обе таблицы ---
         combined = list(chain(qs1_values, qs2_values))
 
-        # ✅ ПОДСЧЕТ РАСХОЖДЕНИЙ
         discrepancies_count = 0
         products_cache = {}  # Кэш для избежания повторных запросов к БД
 
@@ -638,25 +641,29 @@ class InventoryUploadView(APIView):
             return Response({"error": f"Отсутствуют обязательные колонки: {', '.join(missing)}"},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        created_count = 0
         errors = []
-        warnings = []  # ✅ Добавляем предупреждения
+        warnings = []
+        validated_data = []  # ✅ Хранилище для валидированных данных
 
-        for row_num, row in enumerate(reader, start=2):  # start=2 т.к. первая строка - заголовки
+        # ========== ШАГ 1: ВАЛИДАЦИЯ ВСЕХ СТРОК ==========
+        for row_num, row in enumerate(reader, start=2):
             try:
-                # Извлекаем данные
+                # Извлекаем и валидируем данные
                 product_id = row["product_id"].strip()
                 product_name = row["product_name"].strip()
+
+                # Валидация quantity (может вызвать ValueError)
                 quantity = int(row["quantity"])
+
                 zone = row["zone"].strip()
                 row_number = int(row["row"]) if row["row"] else None
                 shelf_number = int(row["shelf"]) if row["shelf"] else None
 
-                # ✅ ПРОВЕРЯЕМ СУЩЕСТВОВАНИЕ ПРОДУКТА
+                # Проверяем существование продукта
                 try:
                     product = Product.objects.get(id=product_id)
 
-                    # Можно добавить предупреждение если есть большое расхождение
+                    # Проверяем большое расхождение
                     expected = product.optimal_stock
                     discrepancy = quantity - expected
                     threshold = max(expected * 0.1, 5)
@@ -670,43 +677,30 @@ class InventoryUploadView(APIView):
                         })
 
                 except Product.DoesNotExist:
-                    # Если продукта нет в базе - создаем его автоматически или выдаем ошибку
                     warnings.append({
                         "row": row_num,
                         "product_id": product_id,
                         "message": f"Продукт '{product_name}' не найден в базе данных. Будет создан с дефолтными значениями."
                     })
 
-                    # ✅ СОЗДАЕМ ПРОДУКТ С ДЕФОЛТНЫМИ ЗНАЧЕНИЯМИ
-                    Product.objects.create(
-                        id=product_id,
-                        name=product_name,
-                        category="Без категории",
-                        min_stock=10,
-                        optimal_stock=quantity  # Используем текущее количество как оптимальное
-                    )
-
-                # Парсим дату и делаем её timezone-aware
+                # Парсим дату
                 scanned_date = parse_date(row["date"])
                 if scanned_date:
                     scanned_at = datetime.combine(scanned_date, datetime.min.time())
                     scanned_at = timezone.make_aware(scanned_at)
                 else:
-                    scanned_at = timezone.now()  # Если дата не указана, используем текущую
+                    scanned_at = timezone.now()
 
-                # Создаём запись в таблице InventoryCSVImport
-                InventoryCSVImport.objects.create(
-                    product_id=product_id,
-                    product_name=product_name,
-                    quantity=quantity,
-                    zone=zone,
-                    scanned_at=scanned_at,
-                    row_number=row_number,
-                    shelf_number=shelf_number,
-                    status='OK'
-                )
-
-                created_count += 1
+                # ✅ Сохраняем валидированные данные
+                validated_data.append({
+                    "product_id": product_id,
+                    "product_name": product_name,
+                    "quantity": quantity,
+                    "zone": zone,
+                    "scanned_at": scanned_at,
+                    "row_number": row_number,
+                    "shelf_number": shelf_number
+                })
 
             except ValueError as e:
                 errors.append({
@@ -723,7 +717,51 @@ class InventoryUploadView(APIView):
                 })
                 continue
 
-        # Формируем ответ
+        # ========== ШАГ 2: ПРОВЕРКА НАЛИЧИЯ ОШИБОК ==========
+        if errors:
+            return Response({
+                "error": "Файл содержит ошибки и не может быть загружен",
+                "errors": errors[:10],  # Показываем первые 10 ошибок
+                "total_errors": len(errors),
+                "message": f"Обнаружено ошибок: {len(errors)}. Исправьте файл и загрузите заново."
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # ========== ШАГ 3: ЗАГРУЗКА ДАННЫХ (только если нет ошибок) ==========
+        created_count = 0
+
+        for data in validated_data:
+            try:
+                # Создаём/получаем продукт если его нет
+                product, created = Product.objects.get_or_create(
+                    id=data["product_id"],
+                    defaults={
+                        "name": data["product_name"],
+                        "category": "Без категории",
+                        "min_stock": 10,
+                        "optimal_stock": data["quantity"]
+                    }
+                )
+
+                # Создаём запись в таблице InventoryCSVImport
+                InventoryCSVImport.objects.create(
+                    product_id=data["product_id"],
+                    product_name=data["product_name"],
+                    quantity=data["quantity"],
+                    zone=data["zone"],
+                    scanned_at=data["scanned_at"],
+                    row_number=data["row_number"],
+                    shelf_number=data["shelf_number"],
+                    status='OK'
+                )
+
+                created_count += 1
+
+            except Exception as e:
+                # Этого не должно произойти, но на всякий случай
+                print(f"Unexpected error during save: {str(e)}")
+                continue
+
+        # ========== ШАГ 4: ФОРМИРУЕМ УСПЕШНЫЙ ОТВЕТ ==========
         response = {
             "message": f"Успешно загружено {created_count} записей",
             "created_count": created_count,
@@ -733,9 +771,4 @@ class InventoryUploadView(APIView):
             response["warnings"] = warnings[:10]  # Первые 10 предупреждений
             response["total_warnings"] = len(warnings)
 
-        if errors:
-            response["errors"] = errors[:5]  # Первые 5 ошибок
-            response["total_errors"] = len(errors)
-
-        status_code = status.HTTP_200_OK if created_count > 0 else status.HTTP_400_BAD_REQUEST
-        return Response(response, status=status_code)
+        return Response(response, status=status.HTTP_200_OK)

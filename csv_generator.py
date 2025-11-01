@@ -3,7 +3,7 @@ import random
 from datetime import datetime
 
 # Параметры генерации
-num_rows = 500  # количество строк
+num_rows = 5  # количество строк
 zones = ['A', 'B', 'C', 'D']
 product_names = [
     "Роутер RT-AC68U",
