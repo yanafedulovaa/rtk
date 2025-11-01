@@ -1,6 +1,6 @@
 import csv
 import random
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # Параметры генерации
 num_rows = 500  # количество строк
@@ -18,7 +18,8 @@ product_names = [
     "Веб-камера Logitech C920"
 ]
 
-start_date = datetime(2024, 1, 1)
+# Текущее время
+now = datetime.now()
 
 # Создаём CSV
 with open('inventory.csv', 'w', newline='', encoding='utf-8') as csvfile:
@@ -30,10 +31,11 @@ with open('inventory.csv', 'w', newline='', encoding='utf-8') as csvfile:
         product_name = random.choice(product_names)
         quantity = random.randint(1, 100)
         zone = random.choice(zones)
-        date = (start_date + timedelta(days=random.randint(0, 365))).strftime('%Y-%m-%d')
+        # Ставим текущее время для всех записей
+        date = now.strftime('%Y-%m-%d %H:%M:%S')
         row = random.randint(1, 20)
         shelf = random.randint(1, 10)
 
         writer.writerow([product_id, product_name, quantity, zone, date, row, shelf])
 
-print("CSV файл 'inventory.csv' успешно создан!")
+print("CSV файл 'inventory.csv' успешно создан с текущей датой и временем!")

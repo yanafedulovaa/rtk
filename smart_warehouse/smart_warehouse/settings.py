@@ -87,7 +87,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'smart_warehouse.wsgi.application'
 
-
+PREDICTION_PROVIDER = 'mock'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
@@ -97,7 +97,7 @@ DATABASES = {
         'NAME': 'smartwarehouse',
         'USER': 'postgres',
         'PASSWORD': 'admin',
-        'HOST': 'db',
+        'HOST': 'localhost',
         'PORT': '5432',
     }
 }
@@ -221,7 +221,7 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [("redis", 6379)], #если с докером то 'redis'
+            "hosts": [("localhost", 6379)], #если с докером то 'redis'
             "capacity": 1000,
         },
 

@@ -18,7 +18,7 @@ from openpyxl import Workbook
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from django.http import HttpResponse
-
+import numpy as np
 from products.models import Product
 from .models import InventoryCSVImport
 
@@ -174,28 +174,109 @@ class InventoryHistoryView(APIView):
         return Response(response_data)
 
 
-class InventoryTrendView(APIView):
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from datetime import datetime
 
+
+def lttb_downsample(data, threshold):
+    """
+    LTTB downsampling - чистая Python реализация
+    data: список словарей [{'scanned_at': '...', 'quantity': ...}, ...]
+    threshold: целевое количество точек
+    """
+    if len(data) <= threshold or threshold < 3:
+        return data
+
+    # Преобразуем в числовые координаты
+    points = []
+    seen_timestamps = set()
+
+    for d in data:
+        timestamp = datetime.fromisoformat(d['scanned_at'].replace('Z', '+00:00')).timestamp()
+
+        # Пропускаем дубликаты или добавляем микросдвиг
+        while timestamp in seen_timestamps:
+            timestamp += 0.001  # Добавляем 1 миллисекунду
+
+        seen_timestamps.add(timestamp)
+        y = float(d['quantity'])
+        points.append({'x': timestamp, 'y': y, 'original': d})
+
+    sampled = [points[0]]  # Всегда берем первую точку
+
+    bucket_size = (len(points) - 2) / (threshold - 2)
+
+    a = 0
+    for i in range(threshold - 2):
+        # Следующий bucket для расчета среднего
+        avg_range_start = int((i + 1) * bucket_size) + 1
+        avg_range_end = int((i + 2) * bucket_size) + 1
+        avg_range_end = min(avg_range_end, len(points))
+
+        avg_x = 0
+        avg_y = 0
+        avg_range_length = avg_range_end - avg_range_start
+
+        for j in range(avg_range_start, avg_range_end):
+            avg_x += points[j]['x']
+            avg_y += points[j]['y']
+
+        avg_x /= avg_range_length
+        avg_y /= avg_range_length
+
+        # Текущий bucket
+        range_start = int(i * bucket_size) + 1
+        range_end = int((i + 1) * bucket_size) + 1
+
+        # Находим точку с максимальной площадью треугольника
+        max_area = -1
+        max_area_point = None
+        max_area_index = 0
+
+        point_a = sampled[-1]
+
+        for j in range(range_start, range_end):
+            # Площадь треугольника
+            area = abs(
+                (point_a['x'] - avg_x) * (points[j]['y'] - point_a['y']) -
+                (point_a['x'] - points[j]['x']) * (avg_y - point_a['y'])
+            ) * 0.5
+
+            if area > max_area:
+                max_area = area
+                max_area_point = points[j]
+                max_area_index = j
+
+        sampled.append(max_area_point)
+        a = max_area_index
+
+    sampled.append(points[-1])  # Всегда берем последнюю точку
+
+    return [p['original'] for p in sampled]
+
+
+class InventoryTrendView(APIView):
     def get(self, request):
+        max_points = int(request.GET.get('max_points', 200))
+
         product_filter = request.GET.get('products')
         if product_filter:
             products = [p.strip() for p in product_filter.split(',')]
             qs1 = InventoryHistory.objects.filter(product_id__in=products)
             qs2 = InventoryCSVImport.objects.filter(product_id__in=products)
         else:
-            # Если товары не указаны, возвращаем данные по всем товарам (или топ-N)
             qs1 = InventoryHistory.objects.all()
             qs2 = InventoryCSVImport.objects.all()
 
         data = {}
-
-        # Объединяем обе таблицы по product_id
-        all_products = set(qs1.values_list('product_id', flat=True)) | set(qs2.values_list('product_id', flat=True))
+        all_products = set(qs1.values_list('product_id', flat=True)) | \
+                       set(qs2.values_list('product_id', flat=True))
 
         for product in all_products:
             records = []
 
-            # История из InventoryHistory
+            # Собираем данные
             for r in qs1.filter(product_id=product).order_by('scanned_at'):
                 if r.quantity is not None:
                     records.append({
@@ -203,7 +284,6 @@ class InventoryTrendView(APIView):
                         'quantity': r.quantity
                     })
 
-            # История из CSV
             for r in qs2.filter(product_id=product).order_by('scanned_at'):
                 if r.quantity is not None:
                     records.append({
@@ -213,11 +293,20 @@ class InventoryTrendView(APIView):
 
             # Сортируем по времени
             records.sort(key=lambda x: x['scanned_at'])
-            data[str(product)] = records  # Приводим к строке для JSON
+
+            # Применяем LTTB если точек больше max_points
+            if len(records) > max_points:
+                records = lttb_downsample(records, max_points)
+
+            data[str(product)] = records
 
         response = {
-            'products': [str(p) for p in all_products],  # Возвращаем список товаров
-            'data': data
+            'products': [str(p) for p in all_products],
+            'data': data,
+            'meta': {
+                'max_points_per_product': max_points,
+                'total_products': len(all_products)
+            }
         }
         return Response(response)
 

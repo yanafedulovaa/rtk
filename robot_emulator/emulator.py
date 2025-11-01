@@ -221,7 +221,7 @@ def print_stats(robots):
 if __name__ == "__main__":
     print_banner()
 
-    api_url = os.getenv('API_URL', 'http://backend:8000')
+    api_url = os.getenv('API_URL', 'http://localhost:8000')
     robots_count = int(os.getenv('ROBOTS_COUNT', 5))  # По умолчанию 5 роботов
     update_interval = int(os.getenv('UPDATE_INTERVAL', 15))  # Обновление каждые 15 секунд (было 5)
 

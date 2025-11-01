@@ -5,8 +5,8 @@ import { useWebSocket } from "../hooks/useWebSocket";
 import Header from "../components/Header";
 import Navigation from "../components/Navigation";
 import WarehouseMap from "./WarehouseMap";
-import InventoryPredict from "./InventoryPredict";
 import RobotActivityChart from "../components/RobotActivityChart";
+import PredictiveAnalytics from "./PredictiveAnalytics";
 
 const styles = {
   container: {
@@ -371,7 +371,7 @@ export default function Dashboard() {
 
         // Браузерное уведомление (если разрешено)
         if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification('⚠️ Критический остаток!', {
+          new Notification('Критический остаток!', {
             body: `${alert.product_name} в зоне ${alert.zone}: ${alert.quantity} шт.`,
             icon: '/favicon.ico',
             requireInteraction: false,
@@ -471,13 +471,19 @@ export default function Dashboard() {
       ))}
 
       <main style={styles.main}>
-        {/* Карта склада */}
         <section style={styles.mapSection}>
-          <h3 style={styles.sectionTitle}>Карта склада</h3>
-          <WarehouseMap
-            robots={data?.robots || []}
-            recentScans={data?.recent_scans || []}
-          />
+          <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            <div style={{ flex: "0 0 auto" }}>
+              <WarehouseMap
+                robots={data?.robots || []}
+                recentScans={data?.recent_scans || []}
+              />
+            </div>
+
+            <div style={{ flex: "1 1 auto", overflowY: "auto", marginTop: "15px" }}>
+              <PredictiveAnalytics />
+            </div>
+          </div>
         </section>
 
         {/* Статистика */}
@@ -577,7 +583,6 @@ export default function Dashboard() {
         </section>
 
         {/* Предиктивная аналитика */}
-        <InventoryPredict />
       </main>
     </div>
   );

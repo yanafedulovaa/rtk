@@ -7,6 +7,7 @@ export default function InventoryTrendModal({ show, onClose, selectedProducts, a
   const [products, setProducts] = useState([]);
   const [visibleLines, setVisibleLines] = useState({});
   const [loading, setLoading] = useState(false);
+  const [granularity, setGranularity] = useState('hour');
 
   const COLORS = [
     '#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#a28bdb',
@@ -157,7 +158,7 @@ export default function InventoryTrendModal({ show, onClose, selectedProducts, a
             ) : (
               <>
                 {/* График */}
-                <ResponsiveContainer width="100%" height={400}>
+                                <ResponsiveContainer width="100%" height={400}>
                   <LineChart data={trendData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis
@@ -177,7 +178,7 @@ export default function InventoryTrendModal({ show, onClose, selectedProducts, a
                         `Товар ${name.replace('product_', '')}`
                       ]}
                     />
-                    <Legend />
+                    {/* <Legend /> Убираем эту строку */}
 
                     {products.map((productId, index) => (
                       visibleLines[productId] && (

@@ -1,0 +1,159 @@
+.predictive-analytics {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #333;
+}
+
+.update-button {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.3s;
+}
+
+.update-button:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.update-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.last-update {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 16px;
+}
+
+.error-message {
+  background: #ffebee;
+  color: #c62828;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.no-data {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
+.predictions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.prediction-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.prediction-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.prediction-card.critical {
+  border-left: 4px solid #f44336;
+  background: #fff8f8;
+}
+
+.prediction-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.product-name {
+  font-weight: 600;
+  font-size: 16px;
+  color: #333;
+}
+
+.critical-badge {
+  background: #f44336;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.prediction-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-item .label {
+  font-size: 12px;
+  color: #666;
+}
+
+.detail-item .value {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.detail-item .critical-date {
+  color: #f44336;
+}
+
+.detail-item .recommend {
+  color: #4CAF50;
+  font-weight: 600;
+}
+
+.confidence-bar {
+  margin-top: 12px;
+}
+
+.confidence-label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #8BC34A);
+  transition: width 0.3s;
+}

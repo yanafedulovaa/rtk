@@ -35,3 +35,11 @@ cd smart_warehouse
 ```bash
 docker-compose up -d --build
 ```
+
+Для быстрого входа в ситсему после первого запуска через Docker можно использовать тестового суперпользователя:
+
+```
+Email: admin@warehouse.com
+Password: admin123
+```
+
