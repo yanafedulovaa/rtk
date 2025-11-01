@@ -132,8 +132,8 @@ export default function WarehouseMap({ robots = [], recentScans = [] }) {
   const handleZoomOut = () => setScale((s) => Math.max(s - 0.2, 0.5));
   const handleCenter = () => {
     if (containerRef.current) {
-      containerRef.current.scrollTop = 0;
-      containerRef.current.scrollLeft = 0;
+      containerRef.current.scrollLeft = containerRef.current.scrollWidth / 2 - containerRef.current.clientWidth / 2;
+      containerRef.current.scrollTop = containerRef.current.scrollHeight / 2 - containerRef.current.clientHeight / 2;
     }
     setOffset({ x: 0, y: 0 });
   };
@@ -146,8 +146,7 @@ export default function WarehouseMap({ robots = [], recentScans = [] }) {
   };
 
   return (
-    <div style={{ padding: 12, position: "relative" }}>
-      <h2 style={{ fontSize: 18, marginBottom: 12 }}>Интерактивная карта склада</h2>
+    <div style={{ padding: 0, position: "relative", width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
       {loading && (
         <div style={{
           position: "absolute",
@@ -163,16 +162,16 @@ export default function WarehouseMap({ robots = [], recentScans = [] }) {
           Загрузка карты...
         </div>
       )}
-      <div style={{ marginBottom: 10 }}>
+      <div style={{ marginBottom: 10, flexShrink: 0 }}>
         <button onClick={handleZoomIn} style={buttonStyle}>+</button>
         <button onClick={handleZoomOut} style={buttonStyle}>−</button>
         <button onClick={handleCenter} style={buttonGrayStyle}>Центрировать</button>
         <span style={{ marginLeft: 15, fontSize: 12, color: "#666" }}>
-          Роботов на карте: {robots.length}
+          Роботов на карте: {robots.length} | Масштаб: {Math.round(scale * 100)}%
         </span>
       </div>
 
-      {/* Остальной код остается без изменений */}
+      {/* Карта */}
       <div
         ref={containerRef}
         style={{
@@ -180,126 +179,135 @@ export default function WarehouseMap({ robots = [], recentScans = [] }) {
           border: "1px solid #ddd",
           borderRadius: 8,
           width: "100%",
-          height: "72vh",
+          flex: 1,
+          minHeight: 0,
           background: "#fff",
+          position: "relative",
         }}
       >
-        <svg
-          width={svgWidth * scale}
-          height={svgHeight * scale}
-          viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-          preserveAspectRatio="xMinYMin meet"
-        >
-          <g transform={`translate(${marginLeft + offset.x}, ${marginTop + offset.y})`}>
-            {/* Сетка ячеек */}
-            {zones.map((zone, colIdx) =>
-              Array.from({ length: rows }).map((_, rowIdx) => {
-                const cellId = `${zone}${rowIdx + 1}`;
-                const cell = zoneStatus[cellId];
-                return (
-                  <rect
-                    key={cellId}
-                    x={colIdx * cellWidth}
-                    y={rowIdx * cellHeight}
-                    width={cellWidth}
-                    height={cellHeight}
-                    fill={getZoneColor(cell)}
-                    stroke="#cfcfcf"
-                    strokeWidth={0.5}
-                    onMouseEnter={(e) => setHoveredCell({
-                      id: cellId,
-                      x: e.clientX,
-                      y: e.clientY,
-                      cell
-                    })}
-                    onMouseLeave={() => setHoveredCell(null)}
-                    style={{ cursor: 'pointer' }}
-                  />
-                );
-              })
-            )}
+        <div style={{
+          width: svgWidth * scale,
+          height: svgHeight * scale,
+          position: "relative",
+          margin: "auto",
+        }}>
+          <svg
+            width={svgWidth * scale}
+            height={svgHeight * scale}
+            viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+            preserveAspectRatio="xMinYMin meet"
+            style={{
+              display: "block",
+            }}
+          >
+            <g transform={`translate(${marginLeft + offset.x}, ${marginTop + offset.y}) scale(${scale})`}>
+              {/* Сетка ячеек */}
+              {zones.map((zone, colIdx) =>
+                Array.from({ length: rows }).map((_, rowIdx) => {
+                  const cellId = `${zone}${rowIdx + 1}`;
+                  const cell = zoneStatus[cellId];
+                  return (
+                    <rect
+                      key={cellId}
+                      x={colIdx * cellWidth}
+                      y={rowIdx * cellHeight}
+                      width={cellWidth}
+                      height={cellHeight}
+                      fill={getZoneColor(cell)}
+                      stroke="#cfcfcf"
+                      strokeWidth={0.5}
+                      onMouseEnter={(e) => setHoveredCell({
+                        id: cellId,
+                        x: e.clientX,
+                        y: e.clientY,
+                        cell
+                      })}
+                      onMouseLeave={() => setHoveredCell(null)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                  );
+                })
+              )}
 
-            {/* Подписи столбцов (зоны A-Z) */}
-            {zones.map((zone, i) => (
-              <text
-                key={`col-${zone}`}
-                x={i * cellWidth + cellWidth / 2}
-                y={-8}
-                fontSize={12}
-                fontWeight="bold"
-                textAnchor="middle"
-                fill="#333"
-              >
-                {zone}
-              </text>
-            ))}
-
-            {/* Подписи рядов (1-50) */}
-            {Array.from({ length: rows }).map((_, j) => (
-              <text
-                key={`row-label-${j + 1}`}
-                x={-10}
-                y={j * cellHeight + cellHeight / 2 + 4}
-                fontSize={12}
-                fontWeight="bold"
-                textAnchor="end"
-                fill="#333"
-              >
-                {j + 1}
-              </text>
-            ))}
-
-            {/* Роботы */}
-            {robots.map((robot) => {
-              const zoneStr = (robot.zone || "").toString().toUpperCase();
-              const zoneIndex = zones.indexOf(zoneStr);
-              const rowNum = Number(robot.row);
-
-              if (zoneIndex === -1 || !rowNum || rowNum < 1 || rowNum > rows) {
-                console.warn(`Robot ${robot.id} has invalid position: ${zoneStr}${rowNum}`);
-                return null;
-              }
-
-              const x = zoneIndex * cellWidth + cellWidth / 2;
-              const y = (rowNum - 1) * cellHeight + cellHeight / 2;
-              const color = robotColor(robot.status, robot.battery);
-
-              return (
-                <g
-                  key={robot.id}
-                  cursor="pointer"
-                  onMouseEnter={(e) => setHoveredRobot({
-                    ...robot,
-                    x: e.clientX,
-                    y: e.clientY
-                  })}
-                  onMouseLeave={() => setHoveredRobot(null)}
+              {/* Подписи столбцов (зоны A-Z) */}
+              {zones.map((zone, i) => (
+                <text
+                  key={`col-${zone}`}
+                  x={i * cellWidth + cellWidth / 2}
+                  y={-8}
+                  fontSize={12}
+                  fontWeight="bold"
+                  textAnchor="middle"
+                  fill="#333"
                 >
-                  {/* Круг робота */}
-                  <circle
-                    cx={x}
-                    cy={y}
-                    r={9}
-                    fill={color}
-                    stroke="#222"
-                    strokeWidth={0.8}
-                  />
-                  {/* ID робота */}
-                  <text
-                    x={x}
-                    y={y + 4}
-                    fontSize={9}
-                    fill="#fff"
-                    textAnchor="middle"
-                    fontWeight="bold"
+                  {zone}
+                </text>
+              ))}
+
+              {/* Подписи рядов (1-50) */}
+              {Array.from({ length: rows }).map((_, j) => (
+                <text
+                  key={`row-label-${j + 1}`}
+                  x={-10}
+                  y={j * cellHeight + cellHeight / 2 + 4}
+                  fontSize={12}
+                  fontWeight="bold"
+                  textAnchor="end"
+                  fill="#333"
+                >
+                  {j + 1}
+                </text>
+              ))}
+
+              {/* Роботы */}
+              {robots.map((robot) => {
+                const zoneStr = (robot.zone || "").toString().toUpperCase();
+                const zoneIndex = zones.indexOf(zoneStr);
+                const rowNum = Number(robot.row);
+
+                if (zoneIndex === -1 || !rowNum || rowNum < 1 || rowNum > rows) {
+                  return null;
+                }
+
+                const x = zoneIndex * cellWidth + cellWidth / 2;
+                const y = (rowNum - 1) * cellHeight + cellHeight / 2;
+                const color = robotColor(robot.status, robot.battery);
+
+                return (
+                  <g
+                    key={robot.id}
+                    onMouseEnter={(e) => setHoveredRobot({
+                      ...robot,
+                      x: e.clientX,
+                      y: e.clientY
+                    })}
+                    onMouseLeave={() => setHoveredRobot(null)}
+                    style={{ cursor: 'pointer' }}
                   >
-                    {String(robot.id).replace(/^RB-/, "")}
-                  </text>
-                </g>
-              );
-            })}
-          </g>
-        </svg>
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r={9}
+                      fill={color}
+                      stroke="#222"
+                      strokeWidth={0.8}
+                    />
+                    <text
+                      x={x}
+                      y={y + 4}
+                      fontSize={9}
+                      fill="#fff"
+                      textAnchor="middle"
+                      fontWeight="bold"
+                    >
+                      {String(robot.id).replace(/^RB-/, "")}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          </svg>
+        </div>
       </div>
 
       {/* Tooltip робота */}
@@ -370,41 +378,7 @@ export default function WarehouseMap({ robots = [], recentScans = [] }) {
       )}
 
       {/* Легенда */}
-      <div style={legendStyle}>
-        <div style={{ fontWeight: "bold", marginBottom: 8, fontSize: 13 }}>
-          Легенда:
-        </div>
-        <div style={legendItemStyle}>
-          <div style={{ ...legendColorBox, backgroundColor: "#d4edda" }} />
-          <span>Проверена недавно</span>
-        </div>
-        <div style={legendItemStyle}>
-          <div style={{ ...legendColorBox, backgroundColor: "#fff3cd" }} />
-          <span>Требует проверки</span>
-        </div>
-        <div style={legendItemStyle}>
-          <div style={{ ...legendColorBox, backgroundColor: "#f8d7da" }} />
-          <span>Критический остаток</span>
-        </div>
-        <div style={legendItemStyle}>
-          <div style={{ ...legendColorBox, backgroundColor: "#e9ecef" }} />
-          <span>Нет данных</span>
-        </div>
-        <div style={{ borderTop: "1px solid #ddd", marginTop: 8, paddingTop: 8 }}>
-          <div style={legendItemStyle}>
-            <div style={{ ...legendColorCircle, backgroundColor: "#28a745" }} />
-            <span>Робот активен</span>
-          </div>
-          <div style={legendItemStyle}>
-            <div style={{ ...legendColorCircle, backgroundColor: "#ffc107" }} />
-            <span>Низкий заряд</span>
-          </div>
-          <div style={legendItemStyle}>
-            <div style={{ ...legendColorCircle, backgroundColor: "#dc3545" }} />
-            <span>Робот offline</span>
-          </div>
-        </div>
-      </div>
+      {/* Легенда рендерится в Dashboard */}
     </div>
   );
 }

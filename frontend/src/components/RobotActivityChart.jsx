@@ -52,10 +52,43 @@ export default function RobotActivityChart() {
 
   if (!chartData) return <p>Загрузка графика активности...</p>;
 
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    layout: {
+      padding: {
+        bottom: 20, // Отступ снизу для легенды
+      }
+    },
+    plugins: {
+      legend: {
+        display: true,
+        position: 'bottom',
+        labels: {
+          padding: 15,
+          boxWidth: 12,
+          boxHeight: 12,
+          font: {
+            size: 12
+          }
+        },
+      },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+      },
+    },
+  };
+
   return (
-    <div style={{ width: "100%", height: 300, marginTop: 20 }}>
-      <h2>Активность роботов за последний час</h2>
-      <Line data={chartData} />
+    <div style={{ width: "100%", height: "250px", marginTop: 0, position: "relative" }}>
+      <h2 style={{ fontSize: "14px", marginBottom: "8px", fontWeight: "bold", color: "#333", flexShrink: 0 }}>
+        Активность роботов за последний час
+      </h2>
+      <div style={{ height: "220px", width: "100%", position: "relative" }}>
+        <Line data={chartData} options={chartOptions} />
+      </div>
     </div>
   );
 }
