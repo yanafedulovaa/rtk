@@ -19,9 +19,9 @@ const styles = {
   gridTemplateColumns: "1.2fr 1.6fr",
   gridTemplateRows: "auto auto auto auto",
   gap: "20px",
-  minHeight: "100vh", // страница может увеличиваться
-  height: "auto",      // теперь высота не фиксирована
-  overflowY: "visible" // (по умолчанию, можно не указывать)
+  minHeight: "100vh",
+  height: "auto",
+  overflowY: "visible"
   },
   mapSection: {
     gridColumn: "1",
@@ -33,7 +33,7 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     minHeight: 0,
-    maxHeight: "500px",
+    maxHeight: "525px",
     overflow: "hidden",
   },
   mapContainer: {
@@ -82,7 +82,7 @@ const styles = {
   flex: 1,
   minHeight: "250px",
   height: "250px",
-  overflow: "visible", // ✅ график не обрежется
+  overflow: "visible",
   position: "relative",
 },
 
@@ -394,7 +394,7 @@ export default function Dashboard() {
       });
     }, 2000);
 
-    // ✅ Используем статистику из события (если есть), иначе оставляем старую
+    //  Используем статистику из события (если есть), иначе оставляем старую
     const updatedStats = lastMessage.data.statistics
       ? {
           ...prevData.statistics,
@@ -406,7 +406,7 @@ export default function Dashboard() {
     return {
       ...prevData,
       recent_scans: newScans,
-      statistics: updatedStats,  // ✅ Используем актуальную статистику с бэкенда
+      statistics: updatedStats,  //  Используем актуальную статистику с бэкенда
     };
   });
   setLastUpdated(new Date().toLocaleTimeString());
@@ -522,7 +522,7 @@ export default function Dashboard() {
             <strong>{alert.product_name}</strong> ({alert.product_id})
           </div>
           <div style={{ fontSize: "12px", marginTop: "5px" }}>
-            Зона: {alert.zone} | Остаток: {alert.quantity} шт.
+            Зона: {alert.zone} - {alert.row} | Остаток: {alert.quantity} шт.
           </div>
         </div>
       ))}
@@ -543,24 +543,21 @@ export default function Dashboard() {
 
           {/* Легенда снизу карты */}
           <div style={styles.legendContainer}>
-            <div style={{ fontWeight: "bold", marginBottom: 6, fontSize: 10 }}>
-              Легенда:
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "4px", fontSize: "8px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "4px", fontSize: "14px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                <div style={{ width: 12, height: 8, backgroundColor: "#d4edda", border: "1px solid #999", borderRadius: 2 }} />
-                <span>Проверена</span>
+                <div style={{ width: 14, height: 10, backgroundColor: "#d4edda", border: "1px solid #999", borderRadius: 2 }} />
+                <span>Проверено сегодня</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                <div style={{ width: 12, height: 8, backgroundColor: "#fff3cd", border: "1px solid #999", borderRadius: 2 }} />
+                <div style={{ width: 14, height: 10, backgroundColor: "#fff3cd", border: "1px solid #999", borderRadius: 2 }} />
                 <span>Требует проверки</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                <div style={{ width: 12, height: 8, backgroundColor: "#f8d7da", border: "1px solid #999", borderRadius: 2 }} />
+                <div style={{ width: 14, height: 10, backgroundColor: "#f8d7da", border: "1px solid #999", borderRadius: 2 }} />
                 <span>Критично</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                <div style={{ width: 12, height: 8, backgroundColor: "#e9ecef", border: "1px solid #999", borderRadius: 2 }} />
+                <div style={{ width: 14, height: 10, backgroundColor: "#e9ecef", border: "1px solid #999", borderRadius: 2 }} />
                 <span>Нет данных</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
@@ -645,26 +642,34 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {data?.recent_scans?.slice(0, 20).map((scan, index) => {
+                {data?.recent_scans?.slice(0, 100).map((scan, index) => {
                   const robot = data.robots.find((r) => r.id === scan.robot_id);
                   const scanId = `${scan.robot_id}-${scan.time}`;
                   const isNew = newScanIds.has(scanId);
 
-                  // Форматируем зону с дефисом: A-31
                   const formatZone = () => {
-                    if (scan.zone) {
-                      // Если зона уже приходит в формате "A-31" или "A31"
-                      const zoneMatch = scan.zone.match(/^([A-Z]+)[-\s]?(\d+)$/);
-                      if (zoneMatch) {
-                        return `${zoneMatch[1]}-${zoneMatch[2]}`;
-                      }
-                      return scan.zone;
-                    }
-                    if (robot && robot.zone && robot.row) {
-                      return `${robot.zone}-${robot.row}`;
-                    }
-                    return "—";
-                  };
+// Сначала проверяем, есть ли zone и row как отдельные поля
+if (scan.zone && scan.row) {
+return `${scan.zone}-${scan.row}`;
+}
+
+// Если зона уже приходит в формате "A-31" или "A31"
+if (scan.zone) {
+const zoneMatch = scan.zone.match(/^([A-Z]+)[-\s]?(\d+)$/);
+if (zoneMatch) {
+  return `${zoneMatch[1]}-${zoneMatch[2]}`;
+}
+// Если только буква без цифры, значит данных недостаточно
+return scan.zone;
+}
+
+// Берём из данных робота как запасной вариант
+if (robot && robot.zone && robot.row) {
+return `${robot.zone}-${robot.row}`;
+}
+
+return "—";
+};
 
                   return (
                     <tr
