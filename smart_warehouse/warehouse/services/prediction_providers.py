@@ -1,7 +1,3 @@
-"""
-Провайдеры для получения прогнозов.
-Реализуют паттерн Strategy для легкой замены источника прогнозов.
-"""
 import random
 from abc import ABC, abstractmethod
 from datetime import datetime

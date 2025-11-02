@@ -1,7 +1,3 @@
-"""
-Сервисный слой для работы с прогнозами.
-Отделяет бизнес-логику от представления (views).
-"""
 from datetime import datetime
 from django.db import transaction
 
@@ -14,11 +10,8 @@ class AIPredictionService:
         """
         Сохраняет прогноз в базу данных.
 
-        Args:
-            prediction_data: dict с данными прогноза
-            product: объект Product
         """
-        from warehouse.models import AIPrediction  # импорт здесь, чтобы избежать circular import
+        from warehouse.models import AIPrediction
 
         metrics = prediction_data.get('metrics', {})
 
@@ -41,8 +34,6 @@ class AIPredictionService:
         """
         Сохраняет множество прогнозов за одну транзакцию.
 
-        Args:
-            predictions_list: список dict с прогнозами и объектами Product
         """
         from warehouse.models import AIPrediction
 

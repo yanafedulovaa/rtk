@@ -1,4 +1,3 @@
-# dashboard/consumers.py
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -106,8 +105,8 @@ class DashboardConsumer(AsyncWebsocketConsumer):
             'statistics': {
                 'active_robots': robots.filter(is_active=True).count(),
                 'total_robots': robots.count(),
-                'checked_today': today_scans.count(),  # ✅ Только сегодня
-                'critical_stock': today_scans.filter(status="CRITICAL").count(),  # ✅ Только сегодня
+                'checked_today': today_scans.count(),
+                'critical_stock': today_scans.filter(status="CRITICAL").count(),
                 'avg_battery': round(sum(r.battery_level for r in robots) / robots.count()) if robots.count() > 0 else 0
             }
         }

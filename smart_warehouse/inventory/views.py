@@ -23,17 +23,18 @@ from products.models import Product
 from .models import InventoryCSVImport
 
 from datetime import datetime, timedelta
+from itertools import chain
+from operator import attrgetter
 
 
+# Пагинация для истории инвентаризации
 class InventoryPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
     max_page_size = 100
 
 
-from itertools import chain
-from operator import attrgetter
-
+# Функция для расчета статуса товара по количеству
 def calculate_status(quantity):
     if quantity is None:
         return "-"
@@ -44,8 +45,8 @@ def calculate_status(quantity):
     return "OK"
 
 
+# Универсальное сериализованное представление элемента для обеих моделей
 def serialize_item(item, source):
-    # Универсальное преобразование для обеих моделей
     return {
         "product_id": item.get("product_id"),
         "product_name": item.get("product_name") or item.get("product__name"),
@@ -61,6 +62,7 @@ def serialize_item(item, source):
 
 
 class InventoryHistoryView(APIView):
+    """Возвращает историю инвентаризации с фильтрацией, поиском, пагинацией и подсчетом расхождений"""
     def get(self, request):
         from_date = request.GET.get('from')
         to_date = request.GET.get('to')
@@ -75,7 +77,6 @@ class InventoryHistoryView(APIView):
         qs1 = InventoryHistory.objects.filter(scanned_at__gte=last_24_hours)
         qs2 = InventoryCSVImport.objects.filter(scanned_at__gte=last_24_hours)
 
-        # --- Фильтры по дате и зоне ---
         if from_date:
             qs1 = qs1.filter(scanned_at__date__gte=from_date)
             qs2 = qs2.filter(scanned_at__date__gte=from_date)
@@ -85,8 +86,6 @@ class InventoryHistoryView(APIView):
         if zone:
             qs1 = qs1.filter(zone__iexact=zone)
             qs2 = qs2.filter(zone__iexact=zone)
-
-        # --- Унифицированный поиск ---
         if search:
             qs1 = qs1.filter(
                 Q(product__name__icontains=search) | Q(product__id__icontains=search)
@@ -95,7 +94,7 @@ class InventoryHistoryView(APIView):
                 Q(product_name__icontains=search) | Q(product_id__icontains=search)
             )
 
-        # --- Преобразуем InventoryHistory в словари ---
+        # Преобразуем QuerySet в список словарей
         qs1_values = list(
             qs1.values(
                 'id',
@@ -111,7 +110,6 @@ class InventoryHistoryView(APIView):
             item["product_name"] = item.pop("product__name")
             item["source"] = "history"
 
-        # --- Преобразуем InventoryCSVImport в словари ---
         qs2_values = list(
             qs2.values(
                 'id',
@@ -137,17 +135,16 @@ class InventoryHistoryView(APIView):
                 item["status"] = "OK"
             item["source"] = "csv"
 
-        # --- Объединяем обе таблицы ---
         combined = list(chain(qs1_values, qs2_values))
 
+        # Подсчет расхождений
         discrepancies_count = 0
-        products_cache = {}  # Кэш для избежания повторных запросов к БД
+        products_cache = {}
 
         for item in combined:
             product_id = item.get("product_id")
             actual_qty = item.get("quantity", 0)
 
-            # Получаем данные о продукте (с кэшированием)
             if product_id not in products_cache:
                 try:
                     product = Product.objects.get(id=product_id)
@@ -164,17 +161,12 @@ class InventoryHistoryView(APIView):
                 expected_qty = product_data['optimal_stock']
                 min_stock = product_data['min_stock']
 
-                # Вычисляем расхождение
                 discrepancy = actual_qty - expected_qty
-
-                # Считаем значимым расхождением отклонение > 10% от optimal_stock
-                # или если товар ниже min_stock при ожидаемом optimal_stock
-                threshold = max(expected_qty * 0.1, 5)  # минимум ±5 единиц
+                threshold = max(expected_qty * 0.1, 5)
 
                 if abs(discrepancy) > threshold or actual_qty < min_stock:
                     discrepancies_count += 1
 
-                # Добавляем данные в item
                 item["expected_quantity"] = expected_qty
                 item["discrepancy"] = discrepancy
                 item["min_stock"] = min_stock
@@ -183,18 +175,17 @@ class InventoryHistoryView(APIView):
                 item["discrepancy"] = None
                 item["min_stock"] = None
 
-        # --- Фильтруем по статусу после объединения ---
         if status_filter and status_filter.lower() != "all":
             combined = [
                 i for i in combined if i.get("status", "").lower() == status_filter.lower()
             ]
 
-        # --- Сортировка ---
+        # Сортировка
         reverse = ordering.startswith("-")
         field = ordering.lstrip("-")
         combined.sort(key=lambda x: x.get(field) if x.get(field) is not None else "", reverse=reverse)
 
-        # --- Пагинация ---
+        # Пагинация
         paginator = InventoryPagination()
         page = paginator.paginate_queryset(combined, request)
 
@@ -204,7 +195,7 @@ class InventoryHistoryView(APIView):
             "summary": {
                 "total_checks": len(combined),
                 "unique_products": len({item["product_name"] for item in combined if item["product_name"]}),
-                "discrepancies": discrepancies_count,  # ✅ Теперь считается реально
+                "discrepancies": discrepancies_count,
                 "avg_time_per_zone": round(len(combined) / 60, 2) if combined else 0
             },
             "pagination": {
@@ -219,42 +210,34 @@ class InventoryHistoryView(APIView):
 
         return Response(response_data)
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from datetime import datetime
-
 
 def lttb_downsample(data, threshold):
     """
-    LTTB downsampling - чистая Python реализация
+    LTTB downsampling - уменьшает количество точек на графике для трендов
     data: список словарей [{'scanned_at': '...', 'quantity': ...}, ...]
     threshold: целевое количество точек
     """
     if len(data) <= threshold or threshold < 3:
         return data
 
-    # Преобразуем в числовые координаты
     points = []
     seen_timestamps = set()
 
     for d in data:
         timestamp = datetime.fromisoformat(d['scanned_at'].replace('Z', '+00:00')).timestamp()
 
-        # Пропускаем дубликаты или добавляем микросдвиг
         while timestamp in seen_timestamps:
-            timestamp += 0.001  # Добавляем 1 миллисекунду
+            timestamp += 0.001
 
         seen_timestamps.add(timestamp)
         y = float(d['quantity'])
         points.append({'x': timestamp, 'y': y, 'original': d})
 
-    sampled = [points[0]]  # Всегда берем первую точку
-
+    sampled = [points[0]]
     bucket_size = (len(points) - 2) / (threshold - 2)
 
     a = 0
     for i in range(threshold - 2):
-        # Следующий bucket для расчета среднего
         avg_range_start = int((i + 1) * bucket_size) + 1
         avg_range_end = int((i + 2) * bucket_size) + 1
         avg_range_end = min(avg_range_end, len(points))
@@ -270,11 +253,9 @@ def lttb_downsample(data, threshold):
         avg_x /= avg_range_length
         avg_y /= avg_range_length
 
-        # Текущий bucket
         range_start = int(i * bucket_size) + 1
         range_end = int((i + 1) * bucket_size) + 1
 
-        # Находим точку с максимальной площадью треугольника
         max_area = -1
         max_area_point = None
         max_area_index = 0
@@ -282,7 +263,6 @@ def lttb_downsample(data, threshold):
         point_a = sampled[-1]
 
         for j in range(range_start, range_end):
-            # Площадь треугольника
             area = abs(
                 (point_a['x'] - avg_x) * (points[j]['y'] - point_a['y']) -
                 (point_a['x'] - points[j]['x']) * (avg_y - point_a['y'])
@@ -296,12 +276,13 @@ def lttb_downsample(data, threshold):
         sampled.append(max_area_point)
         a = max_area_index
 
-    sampled.append(points[-1])  # Всегда берем последнюю точку
+    sampled.append(points[-1])
 
     return [p['original'] for p in sampled]
 
 
 class InventoryTrendView(APIView):
+    """Возвращает тренд изменения количества товаров во времени с возможностью downsampling"""
     def get(self, request):
         max_points = int(request.GET.get('max_points', 200))
 
@@ -321,7 +302,6 @@ class InventoryTrendView(APIView):
         for product in all_products:
             records = []
 
-            # Собираем данные
             for r in qs1.filter(product_id=product).order_by('scanned_at'):
                 if r.quantity is not None:
                     records.append({
@@ -336,10 +316,8 @@ class InventoryTrendView(APIView):
                         'quantity': r.quantity
                     })
 
-            # Сортируем по времени
             records.sort(key=lambda x: x['scanned_at'])
 
-            # Применяем LTTB если точек больше max_points
             if len(records) > max_points:
                 records = lttb_downsample(records, max_points)
 
@@ -357,10 +335,8 @@ class InventoryTrendView(APIView):
 
 
 class InventoryExportMixin:
-    """ Общая логика фильтрации для экспорта с поддержкой двух таблиц """
-
+    """Миксин для фильтрации и подготовки данных для экспорта (Excel/PDF) из InventoryHistory и InventoryCSVImport"""
     def get_filtered_data(self, request):
-        # --- Существующий код ---
         if request.data.get("all"):
             filters = request.data.get("filters", {})
             from_date = filters.get("from")
@@ -381,7 +357,6 @@ class InventoryExportMixin:
             if zone:
                 qs1 = qs1.filter(zone__iexact=zone)
                 qs2 = qs2.filter(zone__iexact=zone)
-
             if search:
                 qs1 = qs1.filter(
                     Q(product__name__icontains=search) | Q(product__id__icontains=search)
@@ -422,6 +397,7 @@ class InventoryExportMixin:
                     "source": "csv",
                 })
         else:
+            # Фильтр по выбранным элементам
             selected = request.data.get("selected", [])
             data = []
 
@@ -464,13 +440,13 @@ class InventoryExportMixin:
                         "source": "csv",
                     })
 
-        # --- Сортировка ---
+        # Сортировка
         ordering = request.data.get("ordering", "-scanned_at")
         reverse = ordering.startswith("-")
         field = ordering.lstrip("-")
         data.sort(key=lambda x: x.get(field), reverse=reverse)
 
-        # ✅ Расчёт расхождений
+        # Расчет расхождений
         products_cache = {}
         discrepancies_count = 0
 
@@ -506,13 +482,11 @@ class InventoryExportMixin:
                 item["discrepancy"] = None
                 item["min_stock"] = None
 
-        # Можно вернуть также количество расхождений при необходимости:
-        # return {"data": data, "discrepancies": discrepancies_count}
-
         return data
 
 
 class InventoryExportExcelView(InventoryExportMixin, APIView):
+    """Экспорт данных инвентаризации в Excel"""
     def post(self, request):
         data = self.get_filtered_data(request)
         if not data:
@@ -561,7 +535,9 @@ class InventoryExportExcelView(InventoryExportMixin, APIView):
         response["Content-Disposition"] = 'attachment; filename="inventory_export.xlsx"'
         return response
 
+
 class InventoryExportPDFView(InventoryExportMixin, APIView):
+    """Экспорт данных инвентаризации в PDF"""
     def post(self, request):
         data = self.get_filtered_data(request)
         if not data:
@@ -572,7 +548,6 @@ class InventoryExportPDFView(InventoryExportMixin, APIView):
         width, height = A4
         y = height - 50
 
-        # ✅ Регистрируем шрифт с кириллицей
         font_path = os.path.join(os.path.dirname(__file__), "DejaVuSans.ttf")
         pdfmetrics.registerFont(TTFont("DejaVuSans", font_path))
         p.setFont("DejaVuSans", 12)
@@ -620,18 +595,17 @@ class InventoryExportPDFView(InventoryExportMixin, APIView):
 
 
 class InventoryUploadView(APIView):
+    """Загрузка CSV-файла с данными инвентаризации, валидация, создание/обновление записей и предупреждения по расхождениям"""
     def post(self, request):
         file = request.FILES.get('file')
         if not file:
             return Response({'error': 'Файл не предоставлен'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Проверяем кодировку
         try:
             decoded_file = file.read().decode('utf-8')
         except UnicodeDecodeError:
             return Response({'error': "Неверная кодировка, требуется UTF-8"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Парсим CSV
         reader = csv.DictReader(io.StringIO(decoded_file), delimiter=';')
 
         # Проверяем наличие обязательных колонок
@@ -643,27 +617,20 @@ class InventoryUploadView(APIView):
 
         errors = []
         warnings = []
-        validated_data = []  # ✅ Хранилище для валидированных данных
+        validated_data = []
 
-        # ========== ШАГ 1: ВАЛИДАЦИЯ ВСЕХ СТРОК ==========
+        # Валидация всех строк
         for row_num, row in enumerate(reader, start=2):
             try:
-                # Извлекаем и валидируем данные
                 product_id = row["product_id"].strip()
                 product_name = row["product_name"].strip()
-
-                # Валидация quantity (может вызвать ValueError)
                 quantity = int(row["quantity"])
-
                 zone = row["zone"].strip()
                 row_number = int(row["row"]) if row["row"] else None
                 shelf_number = int(row["shelf"]) if row["shelf"] else None
 
-                # Проверяем существование продукта
                 try:
                     product = Product.objects.get(id=product_id)
-
-                    # Проверяем большое расхождение
                     expected = product.optimal_stock
                     discrepancy = quantity - expected
                     threshold = max(expected * 0.1, 5)
@@ -683,7 +650,6 @@ class InventoryUploadView(APIView):
                         "message": f"Продукт '{product_name}' не найден в базе данных. Будет создан с дефолтными значениями."
                     })
 
-                # Парсим дату
                 scanned_date = parse_date(row["date"])
                 if scanned_date:
                     scanned_at = datetime.combine(scanned_date, datetime.min.time())
@@ -691,7 +657,6 @@ class InventoryUploadView(APIView):
                 else:
                     scanned_at = timezone.now()
 
-                # ✅ Сохраняем валидированные данные
                 validated_data.append({
                     "product_id": product_id,
                     "product_name": product_name,
@@ -717,21 +682,19 @@ class InventoryUploadView(APIView):
                 })
                 continue
 
-        # ========== ШАГ 2: ПРОВЕРКА НАЛИЧИЯ ОШИБОК ==========
         if errors:
             return Response({
                 "error": "Файл содержит ошибки и не может быть загружен",
-                "errors": errors[:10],  # Показываем первые 10 ошибок
+                "errors": errors[:10],
                 "total_errors": len(errors),
                 "message": f"Обнаружено ошибок: {len(errors)}. Исправьте файл и загрузите заново."
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # ========== ШАГ 3: ЗАГРУЗКА ДАННЫХ (только если нет ошибок) ==========
         created_count = 0
 
         for data in validated_data:
             try:
-                # Создаём/получаем продукт если его нет
+                # Создаем/получаем продукт, если его нет
                 product, created = Product.objects.get_or_create(
                     id=data["product_id"],
                     defaults={
@@ -742,7 +705,6 @@ class InventoryUploadView(APIView):
                     }
                 )
 
-                # Создаём запись в таблице InventoryCSVImport
                 InventoryCSVImport.objects.create(
                     product_id=data["product_id"],
                     product_name=data["product_name"],
@@ -757,18 +719,16 @@ class InventoryUploadView(APIView):
                 created_count += 1
 
             except Exception as e:
-                # Этого не должно произойти, но на всякий случай
                 print(f"Unexpected error during save: {str(e)}")
                 continue
 
-        # ========== ШАГ 4: ФОРМИРУЕМ УСПЕШНЫЙ ОТВЕТ ==========
         response = {
             "message": f"Успешно загружено {created_count} записей",
             "created_count": created_count,
         }
 
         if warnings:
-            response["warnings"] = warnings[:10]  # Первые 10 предупреждений
+            response["warnings"] = warnings[:10]
             response["total_warnings"] = len(warnings)
 
         return Response(response, status=status.HTTP_200_OK)

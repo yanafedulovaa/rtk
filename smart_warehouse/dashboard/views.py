@@ -66,7 +66,6 @@ class ZoneStatusAPIView(APIView):
         rows_count = 50
         zone_status = {}
 
-        # ОПТИМИЗАЦИЯ: Получаем все сканирования одним запросом
         # Используем select_related для оптимизации обращения к product
         all_scans = InventoryHistory.objects.select_related('product').filter(
             zone__in=list(zones_letters),
@@ -74,14 +73,13 @@ class ZoneStatusAPIView(APIView):
         ).order_by('zone', 'row_number', '-scanned_at')
 
         # Создаем словарь для группировки по зоне и ряду
-        # Берем только самое свежее сканирование для каждой комбинации (zone, row_number)
         latest_scans = {}
         for scan in all_scans:
             key = (scan.zone, scan.row_number)
             if key not in latest_scans:
                 latest_scans[key] = scan
 
-        # Формируем ответ
+
         for zone in zones_letters:
             for row in range(1, rows_count + 1):
                 cell_key = f"{zone}{row}"

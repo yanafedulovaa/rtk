@@ -1,23 +1,6 @@
-# inventory/serializers.py
 from rest_framework import serializers
 from warehouse.models import InventoryHistory
 
-
-"""
-Колонки: 
-
-Дата и время проверки
-ID робота
-Зона склада
-Артикул товара
-Название товара
-Ожидаемое количество
-Фактическое количество
-Расхождение (+/-)
-Статус
-Сортировка по каждой колонке
-Пагинация (20/50/100 записей на странице)
-Возможность выбора записей (checkbox в первой колонке)"""
 
 
 class InventoryItemSerializer(serializers.ModelSerializer):

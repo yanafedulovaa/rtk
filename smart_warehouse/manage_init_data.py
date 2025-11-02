@@ -16,7 +16,7 @@ User = get_user_model()
 
 
 def create_initial_data():
-    print("🚀 Начало загрузки начальных данных...\n")
+    print("Начало загрузки начальных данных...\n")
 
     # 1. Создаем суперпользователя (если его нет)
     if not User.objects.filter(email='admin@warehouse.com').exists():
@@ -24,9 +24,9 @@ def create_initial_data():
             email='admin@warehouse.com',
             password='admin123'
         )
-        print("✅ Создан суперпользователь: admin@warehouse.com / admin123")
+        print("Создан суперпользователь: admin@warehouse.com / admin123")
     else:
-        print("ℹ️  Суперпользователь уже существует")
+        print("Суперпользователь уже существует")
 
     # 2. Создаем тестовые товары
     products_data = [
@@ -52,7 +52,7 @@ def create_initial_data():
             }
         )
         created_products.append(product)
-    print(f"✅ Создано товаров: {len(created_products)}")
+    print(f"Создано товаров: {len(created_products)}")
 
     # 3. Создаем тестовых роботов
     robots_data = [
@@ -79,14 +79,13 @@ def create_initial_data():
             }
         )
         created_robots.append(robot)
-    print(f"✅ Создано роботов: {len(created_robots)}")
+    print(f"Создано роботов: {len(created_robots)}")
 
-    # 4. Создаем историю сканирований для заполнения карты
+    # Создаем историю сканирований для заполнения карты
     zones = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     rows = 50
     now = timezone.now()
 
-    # Количество ячеек для заполнения (примерно 30% карты)
     cells_to_fill = int(len(zones) * rows * 0.3)  # ~390 ячеек
 
     scans_created = 0
@@ -96,11 +95,9 @@ def create_initial_data():
         product = random.choice(created_products)
         robot = random.choice(created_robots)
 
-        # Случайное время сканирования (от 1 часа назад до 30 дней назад)
         hours_ago = random.randint(1, 24 * 30)  # от 1 часа до 30 дней
         scanned_at = now - timedelta(hours=hours_ago)
 
-        # Определяем статус и количество в зависимости от времени сканирования
         rand = random.random()
         if rand < 0.1:  # 10% - критический остаток
             quantity = random.randint(1, 5)
@@ -112,7 +109,6 @@ def create_initial_data():
             quantity = random.randint(16, 100)
             status = "OK"
 
-        # Проверяем, есть ли уже более свежее сканирование для этой ячейки
         existing_scan = InventoryHistory.objects.filter(
             zone=zone,
             row_number=row
@@ -132,25 +128,22 @@ def create_initial_data():
             )
             scans_created += 1
 
-    # Также создаем несколько свежих сканирований (за последний час)
     for _ in range(50):
         zone = random.choice(zones)
         row = random.randint(1, rows)
         product = random.choice(created_products)
         robot = random.choice(created_robots)
 
-        # Свежие сканирования (от 1 минуты до 1 часа назад)
         minutes_ago = random.randint(1, 60)
         scanned_at = now - timedelta(minutes=minutes_ago)
 
         quantity = random.randint(20, 100)
         status = "OK"
 
-        # Обновляем или создаем свежее сканирование
         InventoryHistory.objects.filter(
             zone=zone,
             row_number=row
-        ).delete()  # Удаляем старое, если есть
+        ).delete()
 
         InventoryHistory.objects.create(
             robot=robot,
@@ -170,7 +163,7 @@ def create_initial_data():
     print(f"   - Ячеек заполнено: ~{cells_to_fill + 50}")
     print(f"   - Свежих сканирований (за последний час): 50")
     print("\nНачальные данные успешно загружены!")
-    print("   Карта склада будет частично заполнена при загрузке дашборда.")
+
 
 
 if __name__ == '__main__':

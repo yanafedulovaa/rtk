@@ -1,4 +1,3 @@
-# robots/views.py
 from datetime import datetime, timezone as dt_timezone, time
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -88,7 +87,7 @@ class RobotScanView(APIView):
                 }
             )
 
-        # ✅ ДОБАВЛЯЕМ: Получаем актуальную статистику один раз перед циклом
+        # Получаем актуальную статистику один раз перед циклом
         today_start = timezone.make_aware(
             datetime.combine(timezone.now().date(), time.min)
         )
@@ -119,7 +118,7 @@ class RobotScanView(APIView):
                 scanned_at=last_update
             )
 
-            # ✅ ОБНОВЛЯЕМ: Пересчитываем статистику после создания записи
+            # Пересчитываем статистику после создания записи
             today_scans_count = today_scans.count() + 1  # +1 за только что созданную запись
             critical_count = today_scans.filter(status="CRITICAL").count()
             if status_text == "CRITICAL":

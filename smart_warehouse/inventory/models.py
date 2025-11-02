@@ -13,19 +13,6 @@ class InventoryCSVImport(models.Model):
     status = models.CharField(max_length=50)
 
 
-    # @property
-    # def status(self) -> str:
-    #     """Вычисляет статус на основе quantity"""
-    #     if self.quantity is None:
-    #         return "-"
-    #     elif self.quantity <= 5:
-    #         return "CRITICAL"
-    #     elif self.quantity <= 20:
-    #         return "LOW_STOCK"
-    #     else:
-    #         return "OK"
-
-
     class Meta:
         verbose_name = "Импорт CSV"
         verbose_name_plural = "Импорты CSV"

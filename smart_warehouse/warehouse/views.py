@@ -55,7 +55,6 @@ class WarehousePredictAPIView(APIView):
             '-prediction_date'  # И по дате
         ).distinct('product_id')[:limit]
 
-        # Если прогнозов нет в БД
         if not predictions.exists():
             return Response({
                 "message": "Прогнозы отсутствуют. Нажмите 'Обновить прогноз'",
@@ -63,7 +62,6 @@ class WarehousePredictAPIView(APIView):
                 "count": 0
             }, status=status.HTTP_200_OK)
 
-        # Сериализуем данные
         serializer = AIPredictionSerializer(predictions, many=True)
 
         return Response({
@@ -89,10 +87,9 @@ class WarehousePredictAPIView(APIView):
         limit = int(request.data.get('limit', 20))  # Рассчитываем для 20 товаров
 
         try:
-            # Получаем провайдер AI
+
             provider = PredictionProviderFactory.get_provider()
 
-            # Получаем товары
             products = Product.objects.all()[:limit]
 
             if not products.exists():
@@ -100,18 +97,15 @@ class WarehousePredictAPIView(APIView):
                     "error": "No products found"
                 }, status=status.HTTP_404_NOT_FOUND)
 
-            # Деактивируем старые прогнозы
             AIPrediction.objects.filter(is_active=True).update(is_active=False)
 
-            # Рассчитываем новые прогнозы
             new_predictions = []
             predictions_to_save = []
 
             for product in products:
-                # Вызываем AI для расчета
+
                 prediction_data = provider.predict(product.id)
 
-                # Подготавливаем для сохранения
                 predictions_to_save.append({
                     'prediction': prediction_data,
                     'product': product
@@ -119,10 +113,8 @@ class WarehousePredictAPIView(APIView):
 
                 new_predictions.append(prediction_data)
 
-            # Сохраняем все прогнозы одной транзакцией
             AIPredictionService.save_batch_predictions(predictions_to_save)
 
-            # Возвращаем топ-5 критических
             critical_predictions = sorted(
                 new_predictions,
                 key=lambda x: x['days_until_stockout']
