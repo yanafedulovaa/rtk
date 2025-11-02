@@ -217,8 +217,13 @@ def lttb_downsample(data, threshold):
     data: список словарей [{'scanned_at': '...', 'quantity': ...}, ...]
     threshold: целевое количество точек
     """
-    if len(data) <= threshold or threshold < 3:
+    # Если точек меньше или равно threshold, возвращаем как есть
+    if len(data) <= threshold:
         return data
+
+    # Минимум 3 точки для алгоритма
+    if threshold < 3:
+        return data[:threshold] if len(data) >= threshold else data
 
     points = []
     seen_timestamps = set()
@@ -226,21 +231,37 @@ def lttb_downsample(data, threshold):
     for d in data:
         timestamp = datetime.fromisoformat(d['scanned_at'].replace('Z', '+00:00')).timestamp()
 
+        # Обработка дубликатов timestamp
+        original_timestamp = timestamp
+        counter = 0
         while timestamp in seen_timestamps:
-            timestamp += 0.001
+            counter += 1
+            timestamp = original_timestamp + (counter * 0.001)
 
         seen_timestamps.add(timestamp)
-        y = float(d['quantity'])
+
+        # Защита от None в quantity
+        y = float(d['quantity']) if d['quantity'] is not None else 0.0
         points.append({'x': timestamp, 'y': y, 'original': d})
 
+    # Сортируем по времени (на всякий случай)
+    points.sort(key=lambda p: p['x'])
+
+    # Всегда берём первую точку
     sampled = [points[0]]
+
+    # Размер бакета
     bucket_size = (len(points) - 2) / (threshold - 2)
 
-    a = 0
     for i in range(threshold - 2):
+        # Вычисляем среднюю точку для следующего бакета
         avg_range_start = int((i + 1) * bucket_size) + 1
         avg_range_end = int((i + 2) * bucket_size) + 1
         avg_range_end = min(avg_range_end, len(points))
+
+        # Защита от пустого диапазона
+        if avg_range_start >= avg_range_end:
+            continue
 
         avg_x = 0
         avg_y = 0
@@ -253,16 +274,23 @@ def lttb_downsample(data, threshold):
         avg_x /= avg_range_length
         avg_y /= avg_range_length
 
+        # Диапазон текущего бакета
         range_start = int(i * bucket_size) + 1
         range_end = int((i + 1) * bucket_size) + 1
 
+        # Защита от выхода за границы
+        range_end = min(range_end, len(points))
+
+        if range_start >= range_end:
+            continue
+
         max_area = -1
         max_area_point = None
-        max_area_index = 0
 
         point_a = sampled[-1]
 
         for j in range(range_start, range_end):
+            # Вычисляем площадь треугольника
             area = abs(
                 (point_a['x'] - avg_x) * (points[j]['y'] - point_a['y']) -
                 (point_a['x'] - points[j]['x']) * (avg_y - point_a['y'])
@@ -271,11 +299,12 @@ def lttb_downsample(data, threshold):
             if area > max_area:
                 max_area = area
                 max_area_point = points[j]
-                max_area_index = j
 
-        sampled.append(max_area_point)
-        a = max_area_index
+        # Добавляем точку с максимальной площадью
+        if max_area_point is not None:
+            sampled.append(max_area_point)
 
+    # Всегда берём последнюю точку
     sampled.append(points[-1])
 
     return [p['original'] for p in sampled]

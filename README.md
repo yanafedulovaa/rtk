@@ -20,7 +20,14 @@
 - **Эмулятор роботов**: Python-скрипт
 - **Docker Compose**: быстрый запуск всех сервисов
 
-### Структура проекта
+## Структура проекта
+```
+smart_warehouse/
+├─ docker-compose.yml 
+├─ frontend/ #Frontend React
+├─ robot_emulator/ #Эмулятор роботов
+└─ smart_warehouse/ #Backend Django
+```
 
 ## Запуск при помощи Docker
 
@@ -42,4 +49,12 @@ docker-compose up -d --build
 Email: admin@warehouse.com
 Password: admin123
 ```
+
+
+## API Документация
+
+Документация доступна через Swagger UI:
+
+- Swagger: [http://localhost:8000/swagger/](http://localhost:8000/swagger/)
+- Redoc: [http://localhost:8000/redoc/](http://localhost:8000/redoc/)
 
