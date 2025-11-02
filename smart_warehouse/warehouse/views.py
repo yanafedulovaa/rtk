@@ -50,8 +50,9 @@ class WarehousePredictAPIView(APIView):
         predictions = AIPrediction.objects.filter(
             is_active=True
         ).select_related('product').order_by(
-            'days_until_stockout',  # Сначала самые критичные
-            '-prediction_date'  # Затем самые свежие
+            'product_id',  # Должно быть первым
+            'days_until_stockout',  # Затем по критичности
+            '-prediction_date'  # И по дате
         ).distinct('product_id')[:limit]
 
         # Если прогнозов нет в БД

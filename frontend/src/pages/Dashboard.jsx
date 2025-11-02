@@ -14,17 +14,18 @@ const styles = {
     backgroundColor: "#f5f5f5",
   },
   main: {
-    padding: "20px",
-    display: "grid",
-    gridTemplateColumns: "1.2fr 1.6fr", // Карта уже - было 2fr
-    gridTemplateRows: "auto auto auto",
-    gap: "20px",
-    height: "calc(100vh - 120px)",
-    minHeight: 0,
+  padding: "20px",
+  display: "grid",
+  gridTemplateColumns: "1.2fr 1.6fr",
+  gridTemplateRows: "auto auto auto auto",
+  gap: "20px",
+  minHeight: "100vh", // страница может увеличиваться
+  height: "auto",      // теперь высота не фиксирована
+  overflowY: "visible" // (по умолчанию, можно не указывать)
   },
   mapSection: {
     gridColumn: "1",
-    gridRow: "1 / span 2", // Карта занимает первые 2 ряда
+    gridRow: "1 / span 2",
     backgroundColor: "white",
     borderRadius: "8px",
     padding: "20px",
@@ -32,6 +33,7 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     minHeight: 0,
+    maxHeight: "500px",
     overflow: "hidden",
   },
   mapContainer: {
@@ -73,12 +75,20 @@ const styles = {
     boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
     display: "flex",
     flexDirection: "column",
-    minHeight: 0,
+    maxHeight: "auto",
     overflow: "hidden",
   },
+ chartContainer: {
+  flex: 1,
+  minHeight: "250px",
+  height: "250px",
+  overflow: "visible", // ✅ график не обрежется
+  position: "relative",
+},
+
   scansSection: {
     gridColumn: "2",
-    gridRow: "2 / span 2",
+    gridRow: "3 / span 2",
     backgroundColor: "white",
     borderRadius: "8px",
     padding: "20px",
@@ -95,12 +105,13 @@ const styles = {
     marginBottom: "15px",
     paddingBottom: "8px",
     borderBottom: "1px solid #e0e0e0",
+    flexShrink: 0,
   },
   statsGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
     gap: "15px",
-    marginBottom: "15px",
+    marginBottom: "0",
   },
   statCard: {
     padding: "12px",
@@ -119,17 +130,15 @@ const styles = {
     margin: 0,
   },
   chartContainer: {
-    height: "250px",
-    minHeight: "250px",
-    maxHeight: "250px",
-    marginTop: "15px",
+    flex: 1,
+    minHeight: 0,
     overflow: "hidden",
-    flexShrink: 0,
+    position: "relative",
   },
   tableContainer: {
     flex: 1,
     overflow: "auto",
-    minHeight: "650px", // Достаточно для 20 строк без прокрутки
+    minHeight: 0,
   },
   table: {
     width: "100%",
@@ -182,6 +191,7 @@ const styles = {
     marginTop: "15px",
     paddingTop: "10px",
     borderTop: "1px solid #e0e0e0",
+    flexShrink: 0,
   },
   pauseButton: {
     backgroundColor: "#6c757d",
@@ -316,24 +326,21 @@ export default function Dashboard() {
     console.log("Processing WebSocket message:", lastMessage);
 
     switch (lastMessage.type) {
-      case "initial_data":
-        // Начальные данные при подключении
-        setData({
-          robots: lastMessage.data.robots || [],
-          recent_scans: lastMessage.data.recent_scans || [],
-          statistics: {
-            active_robots: lastMessage.data.robots?.length || 0,
-            total_robots: lastMessage.data.robots?.length || 0,
-            checked_today: lastMessage.data.recent_scans?.length || 0,
-            critical_stock: lastMessage.data.recent_scans?.filter(s => s.status === "CRITICAL").length || 0,
-            avg_battery: Math.round(
-              lastMessage.data.robots?.reduce((sum, r) => sum + (r.battery || 0), 0) /
-              (lastMessage.data.robots?.length || 1)
-            ),
-          },
-        });
-        setLastUpdated(new Date().toLocaleTimeString());
-        break;
+          case "initial_data":
+      setData({
+        robots: lastMessage.data.robots || [],
+        recent_scans: lastMessage.data.recent_scans || [],
+        statistics: lastMessage.data.statistics || {
+          active_robots: 0,
+          total_robots: 0,
+          checked_today: 0,
+          critical_stock: 0,
+          avg_battery: 0,
+        },
+      });
+      setLastUpdated(new Date().toLocaleTimeString());
+      break;
+
 
       case "robot_update":
         // Обновление данных робота
@@ -368,40 +375,43 @@ export default function Dashboard() {
         setLastUpdated(new Date().toLocaleTimeString());
         break;
 
-      case "new_scan":
-        // Новое сканирование
-        setData(prevData => {
-          if (!prevData) return prevData;
+           case "new_scan":
+  // Новое сканирование
+  setData(prevData => {
+    if (!prevData) return prevData;
 
-          const newScan = lastMessage.data;
-          const newScans = [newScan, ...prevData.recent_scans].slice(0, 20);
+    const newScan = lastMessage.data;
+    const newScans = [newScan, ...prevData.recent_scans].slice(0, 20);
 
-          // Помечаем новую строку для анимации
-          const scanId = `${newScan.robot_id}-${newScan.time}`;
-          setNewScanIds(prev => new Set([...prev, scanId]));
-          setTimeout(() => {
-            setNewScanIds(prev => {
-              const newSet = new Set(prev);
-              newSet.delete(scanId);
-              return newSet;
-            });
-          }, 2000);
+    // Помечаем новую строку для анимации
+    const scanId = `${newScan.robot_id}-${newScan.time}`;
+    setNewScanIds(prev => new Set([...prev, scanId]));
+    setTimeout(() => {
+      setNewScanIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(scanId);
+        return newSet;
+      });
+    }, 2000);
 
-          // Обновляем статистику
-          const stats = {
-            ...prevData.statistics,
-            checked_today: (prevData.statistics.checked_today || 0) + 1,
-            critical_stock: newScans.filter(s => s.status === "CRITICAL").length,
-          };
+    // ✅ Используем статистику из события (если есть), иначе оставляем старую
+    const updatedStats = lastMessage.data.statistics
+      ? {
+          ...prevData.statistics,
+          checked_today: lastMessage.data.statistics.checked_today,
+          critical_stock: lastMessage.data.statistics.critical_stock,
+        }
+      : prevData.statistics;
 
-          return {
-            ...prevData,
-            recent_scans: newScans,
-            statistics: stats,
-          };
-        });
-        setLastUpdated(new Date().toLocaleTimeString());
-        break;
+    return {
+      ...prevData,
+      recent_scans: newScans,
+      statistics: updatedStats,  // ✅ Используем актуальную статистику с бэкенда
+    };
+  });
+  setLastUpdated(new Date().toLocaleTimeString());
+  break;
+
 
       case "inventory_alert":
         // Критический остаток
@@ -521,7 +531,7 @@ export default function Dashboard() {
         {/* Верхний левый блок: Карта склада */}
         <section style={styles.mapSection}>
           <h3 style={styles.sectionTitle}>Карта склада</h3>
-          
+
           <div style={styles.mapContainer}>
             <div style={styles.mapWrapper}>
               <WarehouseMap
