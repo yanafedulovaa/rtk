@@ -18,7 +18,7 @@ const PredictiveAnalytics = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('http://localhost:8000/api/warehouse/predictions/');
+      const response = await axios.get('http://185.146.3.192/api/warehouse/predictions/');
       console.log('Predictions from server:', response.data);
 
       // Обрабатываем данные с проверкой структуры
