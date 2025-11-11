@@ -295,7 +295,7 @@ export default function Dashboard() {
   const [newScanIds, setNewScanIds] = useState(new Set());
 
   // WebSocket подключение
-  const WS_URL = "ws://127.0.0.1:8000/ws/dashboard/";
+  const WS_URL = "ws://185.146.3.192/ws/dashboard/";
   const { isConnected, lastMessage, connectionStatus } = useWebSocket(WS_URL);
 
   // Загрузка начальных данных через REST API
