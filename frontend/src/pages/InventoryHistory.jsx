@@ -51,7 +51,7 @@ export default function InventoryHistoryPage() {
         }
       } : { params };
 
-      const res = await axios.get("http://localhost:8000/api/inventory/history/", config);
+      const res = await axios.get("http://185.146.3.192/api/inventory/history/", config);
 
       setItems(res.data.items.map((i) => ({
         ...i,
@@ -168,7 +168,7 @@ export default function InventoryHistoryPage() {
       }
 
       const res = await axios.post(
-        `http://localhost:8000/api/inventory/export/${format}/`,
+        `http://185.146.3.192/api/inventory/export/${format}/`,
         payload,
         config
       );

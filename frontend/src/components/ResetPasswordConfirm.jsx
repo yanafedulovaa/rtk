@@ -38,7 +38,7 @@ export default function ResetPasswordConfirm() {
     setLoading(true);
 
     try {
-      const response = await axios.post("http://127.0.0.1:8000/api/password_reset/confirm/", {
+      const response = await axios.post("http://185.146.3.192/api/password_reset/confirm/", {
         token,
         password
       });

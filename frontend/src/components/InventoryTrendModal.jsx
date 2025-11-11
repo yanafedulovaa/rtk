@@ -33,7 +33,7 @@ export default function InventoryTrendModal({ show, onClose, selectedProducts, a
         params.products = selectedProducts.join(',');
       }
 
-      const url = 'http://localhost:8000/api/inventory/trend/';
+      const url = 'http://185.146.3.192/api/inventory/trend/';
       console.log('Request URL:', url);
       console.log('Request params:', params);
 
