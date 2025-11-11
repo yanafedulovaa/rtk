@@ -12,6 +12,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - my-network  
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 512M
 
   redis:
     image: redis:7-alpine
@@ -22,6 +30,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - my-network  
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+        reservations:
+          memory: 256M
 
   backend:
     build: ./smart_warehouse
@@ -40,11 +56,21 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - my-network  
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 512M
 
   frontend:
     build: ./frontend
     container_name: smart_warehouse-frontend
     command: npm start
+    networks:
+      - my-network  
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -52,6 +78,12 @@ services:
       - "3000:3000"
     depends_on:
       - backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 512M
 
   robot_emulator:
     build: ./robot_emulator
@@ -59,10 +91,42 @@ services:
     command: python emulator.py
     volumes:
       - ./robot_emulator:/app
+    networks:
+      - my-network  
     environment:
       BACKEND_URL: http://backend:8000
     depends_on:
       - backend
+    deploy:
+      resources:
+        limit
+          memory: 512M
+        reservations:
+          memory: 256M
 
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    build:
+        context: .
+        dockerfile: ./docker/nginx/Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - my-network  
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+        
 volumes:
   pgdata:
+
+networks:
+  my-network:
+    driver: bridge
