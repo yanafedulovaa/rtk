@@ -38,7 +38,7 @@ const PredictiveAnalytics = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.post('http://localhost:8000/api/warehouse/predictions/', {
+      const response = await axios.post('http://185.146.3.192/api/warehouse/predictions/', {
         limit: 20
       });
       console.log('Updated predictions:', response.data);
